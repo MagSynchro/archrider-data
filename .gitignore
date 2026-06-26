@@ -1,4 +1,4 @@
 node_modules/
 helpers/
 .env
-src/*.json
+src/decks/

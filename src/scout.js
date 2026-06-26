@@ -25,7 +25,7 @@ async function scoutDecks(user) {
 
     const data = await response.json();
     
-    fs.writeFileSync(`decks_${user}.json`, JSON.stringify(data, null, 2));
+    fs.writeFileSync(`./decks/decks_${user}.json`, JSON.stringify(data, null, 2));
     console.log(`Recon successful: decks_${user}.json created.`);
     
   } catch (error) {
