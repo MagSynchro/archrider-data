@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS commander_decks (
     format_id INTEGER,
     color_identity JSONB,
     owner_username VARCHAR(100),
+    ownerID INTEGER,
     edh_bracket VARCHAR(50),
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
