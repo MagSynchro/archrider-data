@@ -91,7 +91,7 @@ async function scoutDecks(user) {
     }
     console.log(`Total decks found for user ${user}: ${deckCount}, Real total: ${realtotal}`);
 
-    fs.writeFileSync(`./decks/decks_${user}.json`, JSON.stringify(allResults, null, 2));
+    fs.writeFileSync(`./jsonfetchfiles/decks_${user}.json`, JSON.stringify(allResults, null, 2));
     console.log(`Recon successful: decks_${user}.json created.`);
 
   } catch (error) {

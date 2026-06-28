@@ -39,7 +39,7 @@ async function importScryfallData() {
     
     if (!downloadResponse.ok) throw new Error(`Download failed: ${downloadResponse.status}`);
     
-    await pipeline(downloadResponse.body, fs.createWriteStream('./scryfall_oracle.json'));
+    await pipeline(downloadResponse.body, fs.createWriteStream('./src/jsonfetchfiles/scryfall_oracle.json'));
     console.log("Download complete.");
 }
 

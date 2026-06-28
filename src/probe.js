@@ -20,7 +20,7 @@ async function probeDeck(id) {
     const data = await response.json();
     
     // Save to a file so we can inspect the exact structure of 'commanders'
-    fs.writeFileSync(`./decks/probe_${id}.json`, JSON.stringify(data, null, 2));
+    fs.writeFileSync(`./jsonfetchfiles/probe_${id}.json`, JSON.stringify(data, null, 2));
     
     console.log("Deep probe complete. Data saved to probe_" + id + ".json");
     
