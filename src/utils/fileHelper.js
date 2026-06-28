@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 
-const JSON_DATA_DIR = path.join(__dirname, '..','src', 'jsonfetchfiles');
+const JSON_DATA_DIR = path.join(__dirname, '..','jsonfetchfiles');
 
 // Ensure the directory exists
 if (!fs.existsSync(JSON_DATA_DIR)) {
