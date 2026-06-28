@@ -3,7 +3,7 @@ const { pipeline } = require('stream/promises');
 const { chain } = require('stream-chain');
 const { parser } = require('stream-json');
 const { streamArray } = require('stream-json/streamers/stream-array.js');
-const db = require('../database/db.js'); // Fixed typo
+const db = require('../database/db.js');
 
 async function importScryfallData() {
     console.log("Fetching Scryfall bulk data manifest...");

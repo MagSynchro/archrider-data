@@ -1,15 +1,10 @@
 // scout.js
-require('dotenv').config({ path: '../.env' }); // Load environment variables from .env
+require('dotenv').config(); // Load environment variables from .env
+const path = require('path');
 const fs = require('fs');
-const { Pool } = require('pg');
+const db = require('../database/db.js');
+const { writeJsonFile } = require('./utils/fileHelper.js');
 
-const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT,
-});
 
 // Grab the username from the command line: node scout.js <username>
 const username = process.argv[2];
@@ -49,7 +44,7 @@ async function scoutDecks(user) {
     const parsedData = JSON.parse(JSON.stringify(allResults));
     let deckCount = parsedData.length;
     let realtotal = 0;
-    console.log(pool);
+    
     for (const deck of parsedData) {
       // Use parameterized values ($1, $2, etc.) to prevent SQL injection and errors
       const query = `
@@ -65,7 +60,8 @@ async function scoutDecks(user) {
       owner_id = EXCLUDED.owner_id,
       edh_bracket = EXCLUDED.edh_bracket,
       updated_at = EXCLUDED.updated_at,
-      last_synced = NOW();
+      last_synced = NOW()
+      WHERE commander_decks.updated_at < EXCLUDED.updated_at;
   `;
 
       const values = [
@@ -80,9 +76,14 @@ async function scoutDecks(user) {
         deck.createdAt,
         deck.updatedAt
       ];
-      console.log(`Inserting/Updating deck: ${deck.id} (${deck.name})`);
+            
       try {
-        await pool.query(query, values);
+        const result = await db.query(query, values);
+        if (result.rowCount === 0) {
+          console.log(`Deck ${deck.id} (${deck.name}) already up-to-date.`);
+        } else {
+          console.log(`Deck ${deck.id} (${deck.name}) inserted/updated successfully.`);
+        }
         realtotal++;
       } catch (error) {
         console.error(`Error inserting deck ${deck.id} (${deck.name}):`, error.message);
@@ -91,7 +92,8 @@ async function scoutDecks(user) {
     }
     console.log(`Total decks found for user ${user}: ${deckCount}, Real total: ${realtotal}`);
 
-    fs.writeFileSync(`./jsonfetchfiles/decks_${user}.json`, JSON.stringify(allResults, null, 2));
+    writeJsonFile(`decks_${user}.json`, allResults);
+
     console.log(`Recon successful: decks_${user}.json created.`);
 
   } catch (error) {

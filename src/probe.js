@@ -1,6 +1,6 @@
-require('dotenv').config({ path: '../.env' }); // Load environment variables from .env
-const { Pool } = require('pg');
-const fs = require('fs');
+require('dotenv').config();
+const db = require('../database/db.js');
+const { writeJsonFile } = require('./utils/fileHelper.js');
 
 const deckId = process.argv[2];
 
@@ -19,10 +19,10 @@ async function probeDeck(id) {
     
     const data = await response.json();
     
-    // Save to a file so we can inspect the exact structure of 'commanders'
-    fs.writeFileSync(`./jsonfetchfiles/probe_${id}.json`, JSON.stringify(data, null, 2));
+    // Use the helper to save the file automatically in src/jsonfetchfiles
+    writeJsonFile(`probe_${id}.json`, data);
     
-    console.log("Deep probe complete. Data saved to probe_" + id + ".json");
+    console.log(`Deep probe complete. Data saved to probe_${id}.json`);
     
     // Quick preview of the cards
     const commanders = data.cards.filter(card => card.categories.includes("Commander"));
