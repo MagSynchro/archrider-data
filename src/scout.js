@@ -50,12 +50,11 @@ async function scoutDecks(user) {
       const query = `
     INSERT INTO commander_decks 
     (archidekt_id, name, card_count, format_id, color_identity, owner_username, owner_id, edh_bracket, created_at, updated_at, last_synced)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
     ON CONFLICT (archidekt_id) DO UPDATE SET
       name = EXCLUDED.name,
       card_count = EXCLUDED.card_count,
-      format_id = EXCLUDED.format_id,
-      color_identity = EXCLUDED.color_identity,
+      format_id = EXCLUDED.format_id,      
       owner_username = EXCLUDED.owner_username,
       owner_id = EXCLUDED.owner_id,
       edh_bracket = EXCLUDED.edh_bracket,
@@ -68,11 +67,10 @@ async function scoutDecks(user) {
         deck.id,
         deck.name,
         deck.size,
-        deck.deckFormat,
-        JSON.stringify(deck.colors),
+        deck.deckFormat,        
         deck.owner.username,
         deck.owner.id,
-        deck.edhBracket || null, // Assuming this is how it's accessed
+        deck.edhBracket || null,
         deck.createdAt,
         deck.updatedAt
       ];
