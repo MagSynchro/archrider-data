@@ -53,15 +53,16 @@ async function probeDeck(id) {
     // 3. Persist to database (Ensuring variable names match!)
     await db.query(`
       INSERT INTO commander_decks (
-        archidekt_id, name, card_count, color_identity, owner_username, card_list, updated_at
+        archidekt_id, name, card_count, color_identity, owner_username, card_list, updated_at, last_synced
       )
-      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
       ON CONFLICT (archidekt_id) DO UPDATE 
       SET name = EXCLUDED.name,
           card_count = EXCLUDED.card_count,
           color_identity = EXCLUDED.color_identity,
           card_list = EXCLUDED.card_list,
-          updated_at = NOW();
+          updated_at = NOW(),
+          last_synced = NOW();
     `, [id, data.name, cardCount, JSON.stringify(colorIdentity), data.owner.username, JSON.stringify(cardList)]);
 
     console.log(`Deck ${id} successfully synced to database.`);
