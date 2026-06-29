@@ -57,3 +57,16 @@ CREATE TABLE card_printings (
     raw_printing_data JSONB
 );
 CREATE INDEX idx_printings_oracle_id ON card_printings(oracle_id);
+
+CREATE TABLE tags (
+    id UUID PRIMARY KEY,
+    slug TEXT UNIQUE,
+    label TEXT
+);
+CREATE TABLE card_taggings (
+    tag_id UUID REFERENCES tags(id),
+    oracle_id UUID REFERENCES cards(oracle_id),
+    weight TEXT
+);
+CREATE INDEX idx_card_taggings_oracle_id ON card_taggings(oracle_id);
+CREATE INDEX idx_card_taggings_tag_id ON card_taggings(tag_id);
