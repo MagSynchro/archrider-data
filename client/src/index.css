@@ -1,1 +1,4 @@
 @import "tailwindcss";
+.nameplate-font {
+  font-family: 'Comic Sans MS', 'Comic Sans', cursive;
+}
