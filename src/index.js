@@ -15,8 +15,8 @@ app.use(express.json());
 // Basic health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-// Placeholder for your routes
-// app.use('/api/decks', require('./routes/deckRoutes'));
+
+app.use('/api/decks', require('./routes/deckRoutes'));
 
 app.listen(PORT, () => {
   console.log(`Archrider API running on port ${PORT}`);

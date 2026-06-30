@@ -70,3 +70,9 @@ CREATE TABLE card_taggings (
 );
 CREATE INDEX idx_card_taggings_oracle_id ON card_taggings(oracle_id);
 CREATE INDEX idx_card_taggings_tag_id ON card_taggings(tag_id);
+CREATE TABLE deck_card_lists (
+    deck_id BIGINT PRIMARY KEY REFERENCES commander_decks(archidekt_id),
+    card_list JSONB NOT NULL,
+    last_synced TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_deck_cards_gin ON deck_card_lists USING GIN (card_list);
