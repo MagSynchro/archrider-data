@@ -23,25 +23,41 @@ exports.getDeckById = async (req, res) => {
         if (rows.length === 0) return res.status(404).json({ error: "Deck not found" });
 
         const deck = rows[0];
-        
+
         // 2. Extract unique oracleIDs for a single bulk query
         const allCards = [...deck.card_list.mainboard, ...deck.card_list.sideboard];
         const uniqueIds = [...new Set(allCards.map(c => c.oracleID))];
 
-        // 3. Bulk fetch names from your 'cards' table
-        const metaQuery = `SELECT oracle_id, name FROM cards WHERE oracle_id = ANY($1)`;
+        // 3. Bulk fetch names AND mana cost/cmc metadata
+        const metaQuery = `
+    SELECT 
+        c.oracle_id, 
+        c.name, 
+        f.mana_cost, 
+        f.cmc 
+    FROM cards c
+    LEFT JOIN card_faces f ON c.oracle_id = f.parent_oracle_id
+    WHERE c.oracle_id = ANY($1)
+`;
         const { rows: metaRows } = await db.query(metaQuery, [uniqueIds]);
 
-        // 4. Create a map for quick lookup: { oracle_id: name }
-        const nameMap = metaRows.reduce((acc, row) => {
-            acc[row.oracle_id] = row.name;
+        // 4. Create an enriched map
+        const metaMap = metaRows.reduce((acc, row) => {
+            acc[row.oracle_id] = {
+                name: row.name,
+                manaCost: row.mana_cost,
+                cmc: row.cmc
+            };
             return acc;
         }, {});
 
-        // 5. Enrich the deck object with names
+        // 5. Enrich the deck object
         const enrich = (list) => list.map(c => ({
             ...c,
-            name: nameMap[c.oracleID] || "Unknown Card"
+            name: metaMap[c.oracleID]?.name || "Unknown Card",
+            manaCost: metaMap[c.oracleID]?.manaCost || "",
+            // Use the fetched cmc, or fallback to your customCmc
+            cmc: metaMap[c.oracleID]?.cmc || c.customCmc || 0
         }));
 
         res.json({
