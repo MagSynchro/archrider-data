@@ -1,24 +1,35 @@
 import { useReactTable, getCoreRowModel, flexRender } from '@tanstack/react-table';
+import { Link } from 'react-router-dom';
 import BracketBadge from './BracketBadge'; // Import the BracketBadge component
 import ColorBadge from './ColorBadge'; // Import the ColorBadge component
 import NameplateBadge from './NamePlateBadge'; // Import your new component
 
+
 const DeckTable = ({ data }) => {
   const columns = [
-    { header: 'Deck Name', accessorKey: 'name' },
+    {
+      header: 'Deck Name',
+      accessorKey: 'name',
+      // Wrap the content in a Link
+      cell: ({ row, getValue }) => (
+        <Link
+          to={`/decks/${row.original.archidekt_id}`}
+          className="text-blue-600 hover:text-blue-800 font-medium hover:underline"
+        >
+          {getValue()}
+        </Link>
+      )
+    },
     { header: 'Owner', accessorKey: 'owner_username' },
     {
-  header: 'Bracket',
-  accessorKey: 'edh_bracket', // The ID from your DB
-  cell: ({ getValue }) => <BracketBadge level={getValue()} />
-},
-{
+      header: 'Bracket',
+      accessorKey: 'edh_bracket',
+      cell: ({ getValue }) => <BracketBadge level={getValue()} />
+    },
+    {
       header: 'Color Identity',
       accessorKey: 'color_identity',
-      // Update this cell to use the NameplateBadge
-      cell: ({ getValue }) => (
-        <NameplateBadge identity={getValue()} />
-      )
+      cell: ({ getValue }) => <NameplateBadge identity={getValue()} />
     },
     { header: 'Cards', accessorKey: 'card_count' }
   ];

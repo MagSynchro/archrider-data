@@ -12,24 +12,44 @@ exports.getAllDecks = async (req, res) => {
 exports.getDeckById = async (req, res) => {
     const { id } = req.params;
     try {
-        const query = `
-            SELECT 
-                c.archidekt_id, c.name, c.card_count, c.color_identity, 
-                c.owner_username, c.edh_bracket, c.updated_at,
-                d.card_list, d.last_synced
-            FROM commander_decks c
-            LEFT JOIN deck_card_lists d ON c.archidekt_id = d.deck_id
+        // 1. Fetch the Deck
+        const deckQuery = `
+            SELECT c.*, d.card_list 
+            FROM commander_decks c 
+            JOIN deck_card_lists d ON c.archidekt_id = d.deck_id 
             WHERE c.archidekt_id = $1;
         `;
-        const { rows } = await db.query(query, [id]);
+        const { rows } = await db.query(deckQuery, [id]);
+        if (rows.length === 0) return res.status(404).json({ error: "Deck not found" });
 
-        if (rows.length === 0) {
-            return res.status(404).json({ error: "Deck not found" });
-        }
+        const deck = rows[0];
+        
+        // 2. Extract unique oracleIDs for a single bulk query
+        const allCards = [...deck.card_list.mainboard, ...deck.card_list.sideboard];
+        const uniqueIds = [...new Set(allCards.map(c => c.oracleID))];
+
+        // 3. Bulk fetch names from your 'cards' table
+        const metaQuery = `SELECT oracle_id, name FROM cards WHERE oracle_id = ANY($1)`;
+        const { rows: metaRows } = await db.query(metaQuery, [uniqueIds]);
+
+        // 4. Create a map for quick lookup: { oracle_id: name }
+        const nameMap = metaRows.reduce((acc, row) => {
+            acc[row.oracle_id] = row.name;
+            return acc;
+        }, {});
+
+        // 5. Enrich the deck object with names
+        const enrich = (list) => list.map(c => ({
+            ...c,
+            name: nameMap[c.oracleID] || "Unknown Card"
+        }));
 
         res.json({
-            ...rows[0],
-            card_list: rows[0].card_list || null
+            ...deck,
+            card_list: {
+                mainboard: enrich(deck.card_list.mainboard),
+                sideboard: enrich(deck.card_list.sideboard)
+            }
         });
     } catch (err) {
         console.error("Error fetching deck:", err);
