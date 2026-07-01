@@ -28,7 +28,7 @@ useEffect(() => {
         const regularCards = data.card_list.mainboard.filter(c => !c.isCommander);
         
         const groups = regularCards.reduce((acc, card) => {
-          const category = card.categories[0] || 'Uncategorized';
+          const category = card.categories[1] || card.categories[0] || "Uncategorized";
           if (!acc[category]) acc[category] = [];
           acc[category].push(card);
           return acc;
