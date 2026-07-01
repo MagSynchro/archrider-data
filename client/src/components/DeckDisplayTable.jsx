@@ -70,8 +70,8 @@ const DeckDisplayTable = () => {
         <div className="max-w-6xl mx-auto p-6">
             <div className="mb-8 border-b border-slate-200 pb-6">
                 <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-3xl font-bold text-slate-800">{deckData.name}</h1>
-                    <NameplateBadge identity={deckData.color_identity} />
+                    <h1 className="text-3xl font-bold text-slate-800">{deckData.name}<BracketBadge level={deckData.edh_bracket} /></h1>                    
+                    <NameplateBadge identity={deckData.color_identity} />                    
                 </div>
                 {/* Spotlight Section - Commanders */}
                 {commanders.length > 0 && (
@@ -88,6 +88,7 @@ const DeckDisplayTable = () => {
                                 {c.name}
                             </div>
                         ))}
+                        
                     </div>
                 )}
 
@@ -105,6 +106,7 @@ const DeckDisplayTable = () => {
                         </div>
                     </div>
                 )}
+                
             </div>
 
             <div className="flex gap-4 mb-6">
