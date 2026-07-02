@@ -2,8 +2,10 @@
 const express = require('express');
 const router = express.Router();
 const deckController = require('../controllers/deckController');
+const manaBaseController = require('../controllers/manaBaseController');
 
 router.get('/', deckController.getAllDecks);
 router.get('/:id', deckController.getDeckById); // Assuming you have a method to get a deck by ID
+router.get('/:id/mana-base', manaBaseController.getManaBaseReport);
 router.get('/user/:username', deckController.getDecksByUser);
 module.exports = router;
