@@ -8,6 +8,17 @@ const db = require('../database/db.js');
 
 const dataType = process.argv[2]; 
 
+// MTG power/toughness are often non-numeric ("*", "1+*", "?") for
+// variable-stat creatures. Only promote to the numeric companion column
+// when the raw value is a clean integer or decimal -- otherwise leave it
+// NULL rather than guessing at a value.
+function parseCleanNumeric(value) {
+    if (value === undefined || value === null) return null;
+    const trimmed = String(value).trim();
+    if (!/^-?\d+(\.\d+)?$/.test(trimmed)) return null;
+    return Number(trimmed);
+}
+
 if (!dataType) {
     console.error("Usage: node src/scryfall_import.js <data_type>");
     console.error("Examples: oracle_cards, oracle_tags, art_tags");
@@ -85,6 +96,9 @@ async function insertBatch(items) {
         case 'oracle_tags':
             await insertOracleTags(items);
             break;
+        case 'default_cards':
+            await insertDefaultCardsPrintings(items);
+            break;
         default:
             console.log(`Handler not yet implemented for ${dataType}.`);
             break;
@@ -98,17 +112,61 @@ async function insertOracleCards(cards) {
         for (const card of cards) {
             if (!card.oracle_id) continue;
             await client.query(`
-                INSERT INTO cards (oracle_id, name, layout, cmc_total, mana_cost_total)
-                VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (oracle_id) DO NOTHING
-            `, [card.oracle_id, card.name, card.layout, card.cmc, card.mana_cost]);
+                INSERT INTO cards (oracle_id, name, layout, cmc_total, mana_cost_total, keywords)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (oracle_id) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    layout = EXCLUDED.layout,
+                    cmc_total = EXCLUDED.cmc_total,
+                    mana_cost_total = EXCLUDED.mana_cost_total,
+                    keywords = EXCLUDED.keywords
+            `, [card.oracle_id, card.name, card.layout, card.cmc, card.mana_cost, card.keywords || null]);
             
             const faces = card.card_faces || [card];
             for (const face of faces) {
                 await client.query(`
-                    INSERT INTO card_faces (parent_oracle_id, name, mana_cost, cmc, artist, artist_id, image_uris, raw_face_data)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                `, [card.oracle_id, face.name, face.mana_cost, face.cmc, face.artist, face.artist_id, face.image_uris, face]);
+                    INSERT INTO card_faces (
+                        parent_oracle_id, name, mana_cost, cmc, oracle_text, artist, artist_id,
+                        image_uris, raw_face_data, produced_mana,
+                        power, toughness, power_numeric, toughness_numeric,
+                        type_line, loyalty, defense
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                    ON CONFLICT (parent_oracle_id, name) DO UPDATE SET
+                        mana_cost = EXCLUDED.mana_cost,
+                        cmc = EXCLUDED.cmc,
+                        oracle_text = EXCLUDED.oracle_text,
+                        artist = EXCLUDED.artist,
+                        artist_id = EXCLUDED.artist_id,
+                        image_uris = EXCLUDED.image_uris,
+                        raw_face_data = EXCLUDED.raw_face_data,
+                        produced_mana = EXCLUDED.produced_mana,
+                        power = EXCLUDED.power,
+                        toughness = EXCLUDED.toughness,
+                        power_numeric = EXCLUDED.power_numeric,
+                        toughness_numeric = EXCLUDED.toughness_numeric,
+                        type_line = EXCLUDED.type_line,
+                        loyalty = EXCLUDED.loyalty,
+                        defense = EXCLUDED.defense
+                `, [
+                    card.oracle_id,
+                    face.name,
+                    face.mana_cost,
+                    face.cmc,
+                    face.oracle_text,
+                    face.artist,
+                    face.artist_id,
+                    face.image_uris,
+                    face,
+                    face.produced_mana || card.produced_mana || null,
+                    face.power ?? null,
+                    face.toughness ?? null,
+                    parseCleanNumeric(face.power),
+                    parseCleanNumeric(face.toughness),
+                    face.type_line || card.type_line || null,
+                    face.loyalty ?? null,
+                    face.defense ?? null
+                ]);
             }
         }
         await client.query('COMMIT');
@@ -136,8 +194,44 @@ async function insertOracleTags(tags) {
                 await client.query(`
                     INSERT INTO card_taggings (tag_id, oracle_id, weight) 
                     VALUES ($1, $2, $3)
+                    ON CONFLICT (tag_id, oracle_id) DO UPDATE SET weight = EXCLUDED.weight
                 `, [tag.id, mapping.oracle_id, mapping.weight]);
             }
+        }
+        await client.query('COMMIT');
+    } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+    } finally {
+        client.release();
+    }
+}
+
+async function insertDefaultCardsPrintings(items) {
+    const client = await db.pool.connect();
+    try {
+        await client.query('BEGIN');
+        for (const printing of items) {
+            // default_cards includes tokens, art series, etc. that have no oracle_id.
+            // Skip those rather than violating the FK to cards.oracle_id.
+            if (!printing.oracle_id) continue;
+
+            await client.query(`
+                INSERT INTO card_printings (id, oracle_id, set_code, collector_number, is_foil, raw_printing_data)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (id) DO UPDATE SET
+                    set_code = EXCLUDED.set_code,
+                    collector_number = EXCLUDED.collector_number,
+                    is_foil = EXCLUDED.is_foil,
+                    raw_printing_data = EXCLUDED.raw_printing_data
+            `, [
+                printing.id,
+                printing.oracle_id,
+                printing.set,
+                printing.collector_number,
+                printing.foil === true, // finishes array is more accurate, but this covers the common case
+                printing
+            ]);
         }
         await client.query('COMMIT');
     } catch (e) {
