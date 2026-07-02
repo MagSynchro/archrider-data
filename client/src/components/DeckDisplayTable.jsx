@@ -152,12 +152,14 @@ const DeckDisplayTable = () => {
             <div className="flex gap-4 mb-6">
                 <button onClick={() => setActiveAnalysis('manaCurve')} className={`px-4 py-2 border rounded text-xs font-bold uppercase ${activeAnalysis === 'manaCurve' ? 'bg-slate-800 text-white' : 'bg-white'}`}>Mana Curve</button>
                 <button onClick={() => setActiveAnalysis('colorCurve')} className={`px-4 py-2 border rounded text-xs font-bold uppercase ${activeAnalysis === 'colorCurve' ? 'bg-slate-800 text-white' : 'bg-white'}`}>Color Curve</button>
+                <button onClick={() => setActiveAnalysis('manaBase')} className={`px-4 py-2 border rounded text-xs font-bold uppercase ${activeAnalysis === 'manaBase' ? 'bg-slate-800 text-white' : 'bg-white'}`}>Mana Base</button>
             </div>
 
             {/* Analysis Modal Integration */}
             {activeAnalysis && (
                 <DeckAnalysisModal
                     cards={deckData.card_list.mainboard}
+                    deckID={deckID}
                     onClose={() => setActiveAnalysis(null)}
                     activeTab={activeAnalysis} // Pass the active state to the modal
                 />
