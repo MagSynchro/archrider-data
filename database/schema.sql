@@ -165,3 +165,22 @@ CREATE TABLE IF NOT EXISTS mana_base_config (
     value NUMERIC NOT NULL,
     description TEXT
 );
+
+-- Deck-scoped manual category overrides. Deliberately separate from
+-- deck_card_lists -- probe.js replaces card_list wholesale on every
+-- re-sync, so anything stored inside that JSONB blob would be destroyed
+-- on the next probe. This table is never touched by probe.js, so
+-- overrides survive re-syncs automatically. Scope is per-deck, not
+-- global: an override changes how a card displays/groups within one
+-- deck's report, it does not touch cards.normalized_category itself.
+-- No user_id column yet -- see migration 009 for the reasoning.
+CREATE TABLE IF NOT EXISTS deck_card_overrides (
+    deck_id BIGINT NOT NULL REFERENCES commander_decks(archidekt_id) ON DELETE CASCADE,
+    oracle_id UUID NOT NULL REFERENCES cards(oracle_id) ON DELETE CASCADE,
+    normalized_category VARCHAR(20) NOT NULL,
+    card_category TEXT,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (deck_id, oracle_id)
+);
+CREATE INDEX IF NOT EXISTS idx_deck_card_overrides_deck ON deck_card_overrides(deck_id);

@@ -1,3 +1,4 @@
+// deckController.js
 const db = require('../../database/db.js');
 
 exports.getAllDecks = async (req, res) => {
@@ -53,14 +54,34 @@ exports.getDeckById = async (req, res) => {
             return acc;
         }, {});
 
+        // 4b. Deck-scoped manual category overrides (see migration 009).
+        // These take priority over the auto-derived taxonomy category when
+        // present, but never touch cards.normalized_category itself --
+        // the override only affects how this one deck's report groups
+        // the card. Stored in a separate table from card_list on purpose:
+        // probe.js replaces card_list wholesale on every re-sync, so
+        // anything living inside that JSONB blob would be destroyed on
+        // the next probe. This table is never touched by probe.js, so
+        // overrides survive re-syncs automatically.
+        const { rows: overrideRows } = await db.query(
+            'SELECT oracle_id, normalized_category, card_category FROM deck_card_overrides WHERE deck_id = $1',
+            [id]
+        );
+        const overrideMap = overrideRows.reduce((acc, row) => {
+            acc[row.oracle_id] = row;
+            return acc;
+        }, {});
+
         // 5. Enrich the deck object with names + taxonomy categories + type_line + manaCost
         const enrich = (list) => list.map(c => {
             const meta = cardMetaMap[c.oracleID];
+            const override = overrideMap[c.oracleID];
             return {
                 ...c,
                 name: meta?.name || "Unknown Card",
-                card_category: meta?.card_category || null,
-                normalized_category: meta?.normalized_category || null,
+                card_category: override?.card_category || meta?.card_category || null,
+                normalized_category: override?.normalized_category || meta?.normalized_category || null,
+                isOverridden: Boolean(override),
                 type_line: meta?.type_line || null,
                 manaCost: meta?.mana_cost || null
             };
@@ -76,6 +97,49 @@ exports.getDeckById = async (req, res) => {
     } catch (err) {
         console.error("Error fetching deck:", err);
         res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+const VALID_NORMALIZED_CATEGORIES = ['RAMP', 'TARGETED_INT', 'MASS_INT', 'CARD_DRAW', 'SYNERGY'];
+
+exports.setCardOverride = async (req, res) => {
+    const { id, oracleId } = req.params;
+    const { normalized_category, card_category } = req.body;
+
+    if (!VALID_NORMALIZED_CATEGORIES.includes(normalized_category)) {
+        return res.status(400).json({
+            error: `normalized_category must be one of: ${VALID_NORMALIZED_CATEGORIES.join(', ')}`
+        });
+    }
+
+    try {
+        await db.query(
+            `INSERT INTO deck_card_overrides (deck_id, oracle_id, normalized_category, card_category, updated_at)
+             VALUES ($1, $2, $3, $4, NOW())
+             ON CONFLICT (deck_id, oracle_id) DO UPDATE SET
+                normalized_category = EXCLUDED.normalized_category,
+                card_category = EXCLUDED.card_category,
+                updated_at = NOW()`,
+            [id, oracleId, normalized_category, card_category || null]
+        );
+        res.json({ deckId: id, oracleId, normalized_category, card_category: card_category || null });
+    } catch (err) {
+        console.error('Error setting card override:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+exports.clearCardOverride = async (req, res) => {
+    const { id, oracleId } = req.params;
+    try {
+        await db.query(
+            'DELETE FROM deck_card_overrides WHERE deck_id = $1 AND oracle_id = $2',
+            [id, oracleId]
+        );
+        res.json({ deckId: id, oracleId, cleared: true });
+    } catch (err) {
+        console.error('Error clearing card override:', err);
+        res.status(500).json({ error: 'Internal server error' });
     }
 };
 

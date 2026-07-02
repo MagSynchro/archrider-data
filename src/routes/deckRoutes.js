@@ -7,5 +7,7 @@ const manaBaseController = require('../controllers/manaBaseController');
 router.get('/', deckController.getAllDecks);
 router.get('/:id', deckController.getDeckById); // Assuming you have a method to get a deck by ID
 router.get('/:id/mana-base', manaBaseController.getManaBaseReport);
+router.put('/:id/cards/:oracleId/category', deckController.setCardOverride);
+router.delete('/:id/cards/:oracleId/category', deckController.clearCardOverride);
 router.get('/user/:username', deckController.getDecksByUser);
 module.exports = router;
