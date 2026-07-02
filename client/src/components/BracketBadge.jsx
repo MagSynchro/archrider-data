@@ -1,3 +1,4 @@
+// BracketBadge.jsx
 const BRACKET_LABELS = {
   1: { label: 'Exhibition', color: 'bg-gray-100 text-gray-800', border: 'border-gray-100' },
   2: { label: 'Core', color: 'bg-blue-100 text-blue-800', border: 'border-blue-100' },
