@@ -1,3 +1,6 @@
+-- ArchRider schema -- current full structure as of the taxonomy work
+-- completed in this session (migrations 001-007 reconciled in).
+--
 -- CONVENTION GOING FORWARD:
 --   - Fresh/empty database: run this file, then the seed data files
 --     listed at the bottom (005 and 007's INSERT). Nothing else needed.
@@ -151,4 +154,14 @@ CREATE TABLE IF NOT EXISTS tag_category_patterns (
     normalized_category VARCHAR(20) NOT NULL,
     priority SMALLINT NOT NULL DEFAULT 40,
     notes TEXT
+);
+
+-- Tunable methodology knobs for mana base analysis (Karsten-style
+-- hypergeometric consistency calculations, see src/utils/manaBaseUtils.js).
+-- Seed data lives separately in database/migrations/008_mana_base_config.sql
+-- -- run that after this file to populate the actual default values.
+CREATE TABLE IF NOT EXISTS mana_base_config (
+    key TEXT PRIMARY KEY,
+    value NUMERIC NOT NULL,
+    description TEXT
 );

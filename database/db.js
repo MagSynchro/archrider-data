@@ -1,4 +1,6 @@
-require('dotenv').config(); // Load environment variables from .env
+// db.js
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') }); // Load environment variables from .env, regardless of CWD
 const { Pool } = require('pg');
 
 const pool = new Pool({
