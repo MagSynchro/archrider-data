@@ -1,9 +1,49 @@
+//DeckDisplayTable.jsx
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import NameplateBadge from './NamePlateBadge';
 import BracketBadge from './BracketBadge';
 import CardPreview from './CardPreview';
 import DeckAnalysisModal from './DeckAnalysisModal'; // New Import
+import { getCardTypeBucket } from '../utils/cardTypeUtils';
+
+// Friendly labels for the five fixed bracket-template buckets.
+// Anything else (fine-grained card_category codes, or the type-line
+// fallback bucket) is humanized generically below.
+const NORMALIZED_CATEGORY_LABELS = {
+    RAMP: 'Ramp',
+    TARGETED_INT: 'Targeted Interaction',
+    MASS_INT: 'Mass Interaction',
+    CARD_DRAW: 'Card Draw',
+    SYNERGY: 'Synergy'
+};
+
+// "MANA_DORK" -> "Mana Dork", "SYN_TYPAL" -> "Typal"
+const humanizeCategoryCode = (code) =>
+    code
+        .replace(/^SYN_/, '')
+        .split('_')
+        .filter(Boolean)
+        .map(word => word.charAt(0) + word.slice(1).toLowerCase())
+        .join(' ');
+
+// Grouping fallback chain, per design decision: normalized_category first
+// (the 5 clean bracket-template buckets), then card_category (fine-grained),
+// then a coarse card-type bucket derived from type_line, then a final
+// catch-all.
+const getGroupLabel = (card) => {
+    if (card.normalized_category) {
+        return NORMALIZED_CATEGORY_LABELS[card.normalized_category]
+            || humanizeCategoryCode(card.normalized_category);
+    }
+    if (card.card_category) {
+        return humanizeCategoryCode(card.card_category);
+    }
+    const typeBucket = getCardTypeBucket(card.type_line);
+    if (typeBucket) return typeBucket;
+
+    return 'Uncategorized';
+};
 
 const DeckDisplayTable = () => {
     const { deckID } = useParams();
@@ -48,7 +88,7 @@ const DeckDisplayTable = () => {
                 setCompanion(sideboard.find(c => c.isCompanion) || null);
                 // 2. Group regular cards
                 const groups = regulars.reduce((acc, card) => {
-                    const cat = card.categories[2] || card.categories[1] || card.categories[0] || 'Uncategorized';
+                    const cat = getGroupLabel(card);
                     if (!acc[cat]) acc[cat] = { cards: [], totalCount: 0 };
                     acc[cat].cards.push(card);
                     acc[cat].totalCount += (card.quantity || 1);

@@ -23,42 +23,48 @@ exports.getDeckById = async (req, res) => {
         if (rows.length === 0) return res.status(404).json({ error: "Deck not found" });
 
         const deck = rows[0];
-
+        
         // 2. Extract unique oracleIDs for a single bulk query
         const allCards = [...deck.card_list.mainboard, ...deck.card_list.sideboard];
         const uniqueIds = [...new Set(allCards.map(c => c.oracleID))];
 
-        // 3. Bulk fetch names AND mana cost/cmc metadata
+        // 3. Bulk fetch names + taxonomy categories from your 'cards' table,
+        // plus one representative type_line/mana_cost per card (DISTINCT ON
+        // picks the lowest card_faces.id per oracle_id -- for single-faced
+        // cards this is the only face; for transform/split cards it's the
+        // first face in Scryfall's own face order). type_line is used as the
+        // final grouping fallback; mana_cost fixes the color mana curve,
+        // which was reading a `manaCost` field that probe.js's mapCard()
+        // never actually populated on the raw Archidekt deck JSON.
         const metaQuery = `
-    SELECT 
-        c.oracle_id, 
-        c.name, 
-        f.mana_cost, 
-        f.cmc 
-    FROM cards c
-    LEFT JOIN card_faces f ON c.oracle_id = f.parent_oracle_id
-    WHERE c.oracle_id = ANY($1)
-`;
+            SELECT DISTINCT ON (c.oracle_id)
+                c.oracle_id, c.name, c.card_category, c.normalized_category,
+                cf.type_line, cf.mana_cost
+            FROM cards c
+            LEFT JOIN card_faces cf ON cf.parent_oracle_id = c.oracle_id
+            WHERE c.oracle_id = ANY($1)
+            ORDER BY c.oracle_id, cf.id ASC
+        `;
         const { rows: metaRows } = await db.query(metaQuery, [uniqueIds]);
 
-        // 4. Create an enriched map
-        const metaMap = metaRows.reduce((acc, row) => {
-            acc[row.oracle_id] = {
-                name: row.name,
-                manaCost: row.mana_cost,
-                cmc: row.cmc
-            };
+        // 4. Create a map for quick lookup: { oracle_id: { name, card_category, normalized_category, type_line, mana_cost } }
+        const cardMetaMap = metaRows.reduce((acc, row) => {
+            acc[row.oracle_id] = row;
             return acc;
         }, {});
 
-        // 5. Enrich the deck object
-        const enrich = (list) => list.map(c => ({
-            ...c,
-            name: metaMap[c.oracleID]?.name || "Unknown Card",
-            manaCost: metaMap[c.oracleID]?.manaCost || "",
-            // Use the fetched cmc, or fallback to your customCmc
-            cmc: metaMap[c.oracleID]?.cmc || c.customCmc || 0
-        }));
+        // 5. Enrich the deck object with names + taxonomy categories + type_line + manaCost
+        const enrich = (list) => list.map(c => {
+            const meta = cardMetaMap[c.oracleID];
+            return {
+                ...c,
+                name: meta?.name || "Unknown Card",
+                card_category: meta?.card_category || null,
+                normalized_category: meta?.normalized_category || null,
+                type_line: meta?.type_line || null,
+                manaCost: meta?.mana_cost || null
+            };
+        });
 
         res.json({
             ...deck,

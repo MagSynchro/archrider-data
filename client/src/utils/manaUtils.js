@@ -1,13 +1,19 @@
-// Helper to check for exclusions
+//manaUtils.js
 const isExcluded = (card) => {
-    const type = (card.categories[0] || "").toLowerCase();
-    return (
-        card.isCommander || 
-        card.isCompanion || 
-        type.includes('land') || 
-        type.includes('sticker') || 
-        type.includes('attraction')
-    );
+    if (card.isCommander || card.isCompanion) return true;
+
+    // Land detection now uses type_line (from our own Scryfall data, always
+    // present and reliable) instead of Archidekt's user-assigned category.
+    // The old categories[0] check missed any land the deck owner never
+    // bothered to categorize, letting it slip into CMC math as a 0-cost
+    // colorless spell and skewing the curve low.
+    if (card.type_line && card.type_line.includes('Land')) return true;
+
+    // Stickers/Attractions are oddball Un-set card types without a
+    // confirmed-reliable type_line shape -- kept on the category-based
+    // check rather than guessed at.
+    const type = (card.categories?.[0] || "").toLowerCase();
+    return type.includes('sticker') || type.includes('attraction');
 };
 
 // Helper to extract colors from mana cost
