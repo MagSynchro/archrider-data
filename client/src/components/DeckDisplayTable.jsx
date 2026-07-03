@@ -6,6 +6,7 @@ import BracketBadge from './BracketBadge';
 import CardPreview from './CardPreview';
 import DeckAnalysisModal from './DeckAnalysisModal'; // New Import
 import CategoryPicker from './CategoryPicker';
+import ToggleSwitch from './ToggleSwitch';
 import { getCardTypeBucket } from '../utils/cardTypeUtils';
 
 // Friendly labels for the five fixed bracket-template buckets.
@@ -46,6 +47,16 @@ const getGroupLabel = (card) => {
     return 'Uncategorized';
 };
 
+// Archidekt view: group by the deck owner's own raw per-card categories
+// instead of our derived taxonomy. Display-only -- per CLAUDE.md these
+// free-text categories are unreliable for anything programmatic, so this
+// exists purely so a user can eyeball Archidekt's opinion vs. ours, not
+// as a data source.
+const getArchidektGroupLabel = (card) => {
+    const categories = (card.categories || []).filter(Boolean);
+    return categories[0] || 'Uncategorized';
+};
+
 const DeckDisplayTable = () => {
     const { deckID } = useParams();
     const [deckData, setDeckData] = useState(null);
@@ -58,6 +69,10 @@ const DeckDisplayTable = () => {
     const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
     const [pickerCard, setPickerCard] = useState(null);
     const [savingOverride, setSavingOverride] = useState(false);
+    // Defaults to Archidekt's own categories. Once user registration/deck
+    // ownership exists (see HANDOFF.md), this default should come from the
+    // logged-in user's saved preference instead of a hardcoded false.
+    const [isArchRiderView, setIsArchRiderView] = useState(false);
 
     const handleMouseMove = (e) => setMousePos({ x: e.clientX, y: e.clientY });
     const getImageUrl = (pid) => `https://cards.scryfall.io/normal/front/${pid[0]}/${pid[1]}/${pid}.jpg`;
@@ -65,51 +80,56 @@ const DeckDisplayTable = () => {
     const loadDeck = () => {
         fetch(`/api/decks/${deckID}`)
             .then(res => res.json())
-            .then(data => {
-                setDeckData(data);
-                //1. Seperate cards into mainboard and sideboard
-                const mainboard = data.card_list.mainboard || [];
-                const sideboard = data.card_list.sideboard || [];
-                // 2. Separate mainboard into non-land, land, and non-cards
-                const regulars = [];
-                const specials = {}; // Object to hold { "Stickers": [], "Attractions": [] }
-                const lands = [];
-
-                mainboard.filter(c => !c.isCommander).forEach(card => {
-                    const primaryType = (card.categories?.[0] || "").toLowerCase();
-                    if (primaryType === 'land') lands.push(card);
-                    else if (['stickers', 'attraction'].includes(primaryType)) {
-                        // Create dynamic category name based on type
-                        const catName = primaryType.charAt(0).toUpperCase() + primaryType.slice(1);
-                        if (!specials[catName]) specials[catName] = [];
-                        specials[catName].push(card);
-                    } else {
-                        regulars.push(card);
-                    }
-                });
-                setCommanders(mainboard.filter(c => c.isCommander));
-                setCompanion(sideboard.find(c => c.isCompanion) || null);
-                // 2. Group regular cards
-                const groups = regulars.reduce((acc, card) => {
-                    const cat = getGroupLabel(card);
-                    if (!acc[cat]) acc[cat] = { cards: [], totalCount: 0 };
-                    acc[cat].cards.push(card);
-                    acc[cat].totalCount += (card.quantity || 1);
-                    return acc;
-                }, {});
-
-                // 3. Add Lands and Others as "Special Groups"
-                if (lands.length > 0) groups['Lands'] = { cards: lands, totalCount: lands.reduce((sum, c) => sum + (c.quantity || 1), 0) };
-                setSpecialCategories(specials);
-                setCategorizedCards(groups);
-
-
-            });
+            .then(data => setDeckData(data));
     };
 
     useEffect(() => {
         loadDeck();
     }, [deckID]);
+
+    // Regroups from the already-fetched deck data whenever the raw data or
+    // the view toggle changes -- no refetch needed to switch views.
+    useEffect(() => {
+        if (!deckData) return;
+
+        const groupLabelFor = isArchRiderView ? getGroupLabel : getArchidektGroupLabel;
+
+        //1. Seperate cards into mainboard and sideboard
+        const mainboard = deckData.card_list.mainboard || [];
+        const sideboard = deckData.card_list.sideboard || [];
+        // 2. Separate mainboard into non-land, land, and non-cards
+        const regulars = [];
+        const specials = {}; // Object to hold { "Stickers": [], "Attractions": [] }
+        const lands = [];
+
+        mainboard.filter(c => !c.isCommander).forEach(card => {
+            const primaryType = (card.categories?.[0] || "").toLowerCase();
+            if (primaryType === 'land') lands.push(card);
+            else if (['stickers', 'attraction'].includes(primaryType)) {
+                // Create dynamic category name based on type
+                const catName = primaryType.charAt(0).toUpperCase() + primaryType.slice(1);
+                if (!specials[catName]) specials[catName] = [];
+                specials[catName].push(card);
+            } else {
+                regulars.push(card);
+            }
+        });
+        setCommanders(mainboard.filter(c => c.isCommander));
+        setCompanion(sideboard.find(c => c.isCompanion) || null);
+        // 2. Group regular cards
+        const groups = regulars.reduce((acc, card) => {
+            const cat = groupLabelFor(card);
+            if (!acc[cat]) acc[cat] = { cards: [], totalCount: 0 };
+            acc[cat].cards.push(card);
+            acc[cat].totalCount += (card.quantity || 1);
+            return acc;
+        }, {});
+
+        // 3. Add Lands and Others as "Special Groups"
+        if (lands.length > 0) groups['Lands'] = { cards: lands, totalCount: lands.reduce((sum, c) => sum + (c.quantity || 1), 0) };
+        setSpecialCategories(specials);
+        setCategorizedCards(groups);
+    }, [deckData, isArchRiderView]);
 
     const handleSelectCategory = (normalizedCategory) => {
         setSavingOverride(true);
@@ -184,10 +204,13 @@ const DeckDisplayTable = () => {
                 
             </div>
 
-            <div className="flex gap-4 mb-6">
-                <button onClick={() => setActiveAnalysis('manaCurve')} className={`px-4 py-2 border rounded text-xs font-bold uppercase ${activeAnalysis === 'manaCurve' ? 'bg-slate-800 text-white' : 'bg-white'}`}>Mana Curve</button>
-                <button onClick={() => setActiveAnalysis('colorCurve')} className={`px-4 py-2 border rounded text-xs font-bold uppercase ${activeAnalysis === 'colorCurve' ? 'bg-slate-800 text-white' : 'bg-white'}`}>Color Curve</button>
-                <button onClick={() => setActiveAnalysis('manaBase')} className={`px-4 py-2 border rounded text-xs font-bold uppercase ${activeAnalysis === 'manaBase' ? 'bg-slate-800 text-white' : 'bg-white'}`}>Mana Base</button>
+            <div className="flex justify-between items-center mb-6">
+                <div className="flex gap-4">
+                    <button onClick={() => setActiveAnalysis('manaCurve')} className={`px-4 py-2 border rounded text-xs font-bold uppercase ${activeAnalysis === 'manaCurve' ? 'bg-slate-800 text-white' : 'bg-white'}`}>Mana Curve</button>
+                    <button onClick={() => setActiveAnalysis('colorCurve')} className={`px-4 py-2 border rounded text-xs font-bold uppercase ${activeAnalysis === 'colorCurve' ? 'bg-slate-800 text-white' : 'bg-white'}`}>Color Curve</button>
+                    <button onClick={() => setActiveAnalysis('manaBase')} className={`px-4 py-2 border rounded text-xs font-bold uppercase ${activeAnalysis === 'manaBase' ? 'bg-slate-800 text-white' : 'bg-white'}`}>Mana Base</button>
+                </div>
+                <ToggleSwitch checked={isArchRiderView} onChange={setIsArchRiderView} labelOff="Archidekt" labelOn="ArchRider" />
             </div>
 
             {/* Analysis Modal Integration */}
@@ -208,8 +231,8 @@ const DeckDisplayTable = () => {
                         .map(([cat, group]) => (
                             <div key={cat} className="bg-white p-4 border border-slate-200 rounded">
                                 <h3 className="font-bold text-xs uppercase text-slate-500 mb-3 border-b pb-1 flex justify-between">{cat}<span>{group.totalCount}</span></h3>
-                                <ul>{group.cards.map((c, i) => <li key={i} className="cursor-pointer" onClick={() => setPickerCard(c)} onMouseEnter={() => setHoveredCard(c)} onMouseLeave={() => setHoveredCard(null)} onMouseMove={handleMouseMove}>
-                                    {c.isOverridden && <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5" title="Manually categorized" />}
+                                <ul>{group.cards.map((c, i) => <li key={i} className="cursor-pointer" onClick={isArchRiderView ? () => setPickerCard(c) : undefined} onMouseEnter={() => setHoveredCard(c)} onMouseLeave={() => setHoveredCard(null)} onMouseMove={handleMouseMove}>
+                                    {isArchRiderView && c.isOverridden && <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5" title="Manually categorized" />}
                                     {c.name}
                                     {c.quantity > 1 && (
                 <span className="text-slate-400 ml-2 font-mono">({c.quantity})</span>
