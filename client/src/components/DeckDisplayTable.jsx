@@ -5,6 +5,7 @@ import NameplateBadge from './NamePlateBadge';
 import BracketBadge from './BracketBadge';
 import CardPreview from './CardPreview';
 import DeckAnalysisModal from './DeckAnalysisModal'; // New Import
+import CategoryPicker from './CategoryPicker';
 import { getCardTypeBucket } from '../utils/cardTypeUtils';
 
 // Friendly labels for the five fixed bracket-template buckets.
@@ -55,11 +56,13 @@ const DeckDisplayTable = () => {
     const [companion, setCompanion] = useState(null);
     const [hoveredCard, setHoveredCard] = useState(null);
     const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+    const [pickerCard, setPickerCard] = useState(null);
+    const [savingOverride, setSavingOverride] = useState(false);
 
     const handleMouseMove = (e) => setMousePos({ x: e.clientX, y: e.clientY });
     const getImageUrl = (pid) => `https://cards.scryfall.io/normal/front/${pid[0]}/${pid[1]}/${pid}.jpg`;
 
-    useEffect(() => {
+    const loadDeck = () => {
         fetch(`/api/decks/${deckID}`)
             .then(res => res.json())
             .then(data => {
@@ -102,7 +105,39 @@ const DeckDisplayTable = () => {
 
 
             });
+    };
+
+    useEffect(() => {
+        loadDeck();
     }, [deckID]);
+
+    const handleSelectCategory = (normalizedCategory) => {
+        setSavingOverride(true);
+        fetch(`/api/decks/${deckID}/cards/${pickerCard.oracleID}/category`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ normalized_category: normalizedCategory })
+        })
+            .then(res => {
+                if (!res.ok) throw new Error(`Request failed (${res.status})`);
+                loadDeck();
+                setPickerCard(null);
+            })
+            .catch(err => console.error('Failed to set category override:', err.message))
+            .finally(() => setSavingOverride(false));
+    };
+
+    const handleClearOverride = () => {
+        setSavingOverride(true);
+        fetch(`/api/decks/${deckID}/cards/${pickerCard.oracleID}/category`, { method: 'DELETE' })
+            .then(res => {
+                if (!res.ok) throw new Error(`Request failed (${res.status})`);
+                loadDeck();
+                setPickerCard(null);
+            })
+            .catch(err => console.error('Failed to clear category override:', err.message))
+            .finally(() => setSavingOverride(false));
+    };
 
     if (!deckData) return <div className="p-10 text-center">Loading deck library...</div>;
 
@@ -173,7 +208,9 @@ const DeckDisplayTable = () => {
                         .map(([cat, group]) => (
                             <div key={cat} className="bg-white p-4 border border-slate-200 rounded">
                                 <h3 className="font-bold text-xs uppercase text-slate-500 mb-3 border-b pb-1 flex justify-between">{cat}<span>{group.totalCount}</span></h3>
-                                <ul>{group.cards.map((c, i) => <li key={i} className="cursor-pointer" onMouseEnter={() => setHoveredCard(c)} onMouseLeave={() => setHoveredCard(null)} onMouseMove={handleMouseMove}>{c.name}
+                                <ul>{group.cards.map((c, i) => <li key={i} className="cursor-pointer" onClick={() => setPickerCard(c)} onMouseEnter={() => setHoveredCard(c)} onMouseLeave={() => setHoveredCard(null)} onMouseMove={handleMouseMove}>
+                                    {c.isOverridden && <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5" title="Manually categorized" />}
+                                    {c.name}
                                     {c.quantity > 1 && (
                 <span className="text-slate-400 ml-2 font-mono">({c.quantity})</span>
             )}
@@ -211,6 +248,16 @@ const DeckDisplayTable = () => {
                 </div>
                 {hoveredCard && <CardPreview cardName={hoveredCard.name} imageUrl={getImageUrl(hoveredCard.printingID)} x={mousePos.x} y={mousePos.y} windowHeight={window.innerHeight} />}
             </div>
+
+            {pickerCard && (
+                <CategoryPicker
+                    card={pickerCard}
+                    saving={savingOverride}
+                    onSelect={handleSelectCategory}
+                    onClear={handleClearOverride}
+                    onClose={() => setPickerCard(null)}
+                />
+            )}
         </div>
     );
 };
