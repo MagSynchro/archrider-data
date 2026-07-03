@@ -1,3 +1,4 @@
+// fileHelper.js
 const path = require('path');
 const fs = require('fs');
 
@@ -20,4 +21,4 @@ function readJsonFile(filename) {
     return JSON.parse(fs.readFileSync(getFilePath(filename), 'utf8'));
 }
 
-module.exports = { writeJsonFile, readJsonFile };
+module.exports = { getFilePath, writeJsonFile, readJsonFile };

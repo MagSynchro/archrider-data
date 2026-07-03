@@ -1,10 +1,11 @@
+// scryfall_import.js
 const fs = require('fs');
-const path = require('path');
 const { pipeline } = require('stream/promises');
 const { chain } = require('stream-chain');
 const { parser } = require('stream-json');
 const { streamArray } = require('stream-json/streamers/stream-array.js');
 const db = require('../database/db.js');
+const { getFilePath } = require('./utils/fileHelper.js');
 
 const dataType = process.argv[2]; 
 
@@ -42,11 +43,7 @@ async function runImport() {
         throw new Error(`Could not find type '${dataType}' in manifest.`);
     }
     
-    // Ensure the directory exists
-    const dir = path.join(__dirname, 'jsonfetchfiles');
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    
-    const filePath = path.join(dir, `${dataType}.json`);
+    const filePath = getFilePath(`${dataType}.json`);
     
     console.log(`Downloading ${dataType} from ${targetFile.download_uri} to ${filePath}...`);
     const downloadResponse = await fetch(targetFile.download_uri);
