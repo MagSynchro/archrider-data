@@ -6,6 +6,7 @@ const util = require('util');
 const execPromise = util.promisify(exec);
 const db = require('../database/db.js');
 const { writeJsonFile } = require('./utils/fileHelper.js');
+const { throttledFetch } = require('../src/utils/archidektThrottle.js');
 
 // Grab the username from the command line: node scout.js <username>
 const username = process.argv[2];
@@ -40,7 +41,8 @@ async function scoutDecks(user) {
 
     while (nextUrl) {
       console.log(`Fetching: ${nextUrl}`);
-      const response = await fetch(nextUrl);
+      // throttledFetch enforces the minimum spacing itself -- no separate delay needed here.
+      const response = await throttledFetch(nextUrl);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -51,7 +53,6 @@ async function scoutDecks(user) {
 
       // The API provides the link to the next page
       nextUrl = data.next;
-      await delay(2000); // Delay to avoid rate limiting 
     }
 
     console.log(`Total decks collected: ${allResults.length}`);
@@ -105,7 +106,10 @@ async function scoutDecks(user) {
 
         // Fixed conditional: Evaluates insert/update OR force status correctly inside parentheses
         if (result.rowCount > 0 || force) {
-          await delay(2000); 
+          // probe.js runs as its own child process, so it can't share this
+          // process's throttledFetch state -- this delay is what actually
+          // paces the Archidekt call each spawned probe.js makes.
+          await delay(2000);
           await triggerProbe(deck.id);
         }
 

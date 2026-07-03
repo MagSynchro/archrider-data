@@ -1,6 +1,8 @@
+// probe.js
 require('dotenv').config();
 const db = require('../database/db.js');
 const { writeJsonFile } = require('./utils/fileHelper.js');
+const { throttledFetch } = require('../src/utils/archidektThrottle.js');
 
 const deckId = process.argv[2];
 
@@ -30,7 +32,7 @@ async function probeDeck(id) {
     const url = `https://archidekt.com/api/decks/${id}/`;
     console.log(`Probing deck: ${id}...`);
 
-    const response = await fetch(url);
+    const response = await throttledFetch(url);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = await response.json();
