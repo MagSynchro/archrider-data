@@ -1,6 +1,7 @@
 // authController.js
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const db = require('../../database/db.js');
 const { throttledFetch } = require('../utils/archidektThrottle.js');
 
@@ -10,6 +11,15 @@ const { throttledFetch } = require('../utils/archidektThrottle.js');
 const KEY_LIFETIME_MS = 4 * 60 * 60 * 1000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const BCRYPT_ROUNDS = 10;
+const SESSION_COOKIE = 'archrider_session';
+const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+const sessionCookieOptions = {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: SESSION_MAX_AGE_MS
+};
 
 // Paginates the same unofficial per-user deck listing endpoint scout.js
 // uses, looking for a deck whose name exactly matches the registration key.
@@ -142,4 +152,53 @@ exports.verify = async (req, res) => {
         console.error('Error verifying registration:', err);
         res.status(500).json({ error: 'Internal server error' });
     }
+};
+
+// Verifies email/password against the users table and issues a JWT
+// session cookie. Kept intentionally minimal (no "remember me", no
+// refresh tokens) -- see HANDOFF_CREDITS.md for what this unblocks.
+exports.login = async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    try {
+        const { rows } = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+        const user = rows[0];
+        if (!user) {
+            return res.status(401).json({ error: 'Invalid email or password' });
+        }
+
+        const passwordMatches = await bcrypt.compare(password, user.password_hash);
+        if (!passwordMatches) {
+            return res.status(401).json({ error: 'Invalid email or password' });
+        }
+
+        const token = jwt.sign(
+            { sub: user.id, email: user.email, archidektUsername: user.archidekt_username },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
+        res.json({
+            id: user.id,
+            email: user.email,
+            archidektUsername: user.archidekt_username
+        });
+    } catch (err) {
+        console.error('Error logging in:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+exports.logout = (req, res) => {
+    res.clearCookie(SESSION_COOKIE, sessionCookieOptions);
+    res.json({ loggedOut: true });
+};
+
+// Returns the currently logged-in user, per requireAuth's decoded token.
+exports.me = (req, res) => {
+    res.json(req.user);
 };

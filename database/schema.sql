@@ -211,3 +211,12 @@ CREATE TABLE IF NOT EXISTS pending_registrations (
 );
 CREATE INDEX IF NOT EXISTS idx_pending_registrations_email ON pending_registrations(email);
 CREATE INDEX IF NOT EXISTS idx_pending_registrations_username ON pending_registrations(claimed_username);
+
+-- Deck ownership, added via ALTER (not inline on commander_decks' own
+-- CREATE TABLE above) because users doesn't exist yet at that point in
+-- this file. Nullable / ON DELETE SET NULL: commander_decks rows are
+-- scraped independently of registration, so most will have no owning
+-- ArchRider user, and deleting a user shouldn't cascade-delete deck data
+-- that's still valid, publicly-sourced content.
+ALTER TABLE commander_decks ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_commander_decks_user_id ON commander_decks(user_id);

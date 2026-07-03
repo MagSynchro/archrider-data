@@ -10,6 +10,22 @@ exports.getAllDecks = async (req, res) => {
     }
 };
 
+// Decks owned by the logged-in user (see migration 012's user_id column
+// and req.user, set by the requireAuth middleware this route is mounted
+// behind).
+exports.getMyDecks = async (req, res) => {
+    try {
+        const { rows } = await db.query(
+            'SELECT * FROM commander_decks WHERE user_id = $1 ORDER BY updated_at DESC NULLS LAST',
+            [req.user.id]
+        );
+        res.json(rows);
+    } catch (err) {
+        console.error('Error fetching my decks:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 exports.getDeckById = async (req, res) => {
     const { id } = req.params;
     try {
