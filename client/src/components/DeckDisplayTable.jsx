@@ -5,7 +5,7 @@ import NameplateBadge from './NamePlateBadge';
 import BracketBadge from './BracketBadge';
 import CardPreview from './CardPreview';
 import DeckAnalysisModal from './DeckAnalysisModal'; // New Import
-import CategoryPicker from './CategoryPicker';
+import CardDetailModal from './CardDetailModal';
 import ToggleSwitch from './ToggleSwitch';
 import { getCardTypeBucket } from '../utils/cardTypeUtils';
 
@@ -67,7 +67,7 @@ const DeckDisplayTable = () => {
     const [companion, setCompanion] = useState(null);
     const [hoveredCard, setHoveredCard] = useState(null);
     const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-    const [pickerCard, setPickerCard] = useState(null);
+    const [detailCard, setDetailCard] = useState(null);
     const [savingOverride, setSavingOverride] = useState(false);
     // Defaults to Archidekt's own categories. Once user registration/deck
     // ownership exists (see HANDOFF.md), this default should come from the
@@ -133,7 +133,7 @@ const DeckDisplayTable = () => {
 
     const handleSelectCategory = (normalizedCategory) => {
         setSavingOverride(true);
-        fetch(`/api/decks/${deckID}/cards/${pickerCard.oracleID}/category`, {
+        fetch(`/api/decks/${deckID}/cards/${detailCard.oracleID}/category`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ normalized_category: normalizedCategory })
@@ -141,7 +141,7 @@ const DeckDisplayTable = () => {
             .then(res => {
                 if (!res.ok) throw new Error(`Request failed (${res.status})`);
                 loadDeck();
-                setPickerCard(null);
+                setDetailCard(null);
             })
             .catch(err => console.error('Failed to set category override:', err.message))
             .finally(() => setSavingOverride(false));
@@ -149,11 +149,11 @@ const DeckDisplayTable = () => {
 
     const handleClearOverride = () => {
         setSavingOverride(true);
-        fetch(`/api/decks/${deckID}/cards/${pickerCard.oracleID}/category`, { method: 'DELETE' })
+        fetch(`/api/decks/${deckID}/cards/${detailCard.oracleID}/category`, { method: 'DELETE' })
             .then(res => {
                 if (!res.ok) throw new Error(`Request failed (${res.status})`);
                 loadDeck();
-                setPickerCard(null);
+                setDetailCard(null);
             })
             .catch(err => console.error('Failed to clear category override:', err.message))
             .finally(() => setSavingOverride(false));
@@ -231,7 +231,7 @@ const DeckDisplayTable = () => {
                         .map(([cat, group]) => (
                             <div key={cat} className="bg-white p-4 border border-slate-200 rounded">
                                 <h3 className="font-bold text-xs uppercase text-slate-500 mb-3 border-b pb-1 flex justify-between">{cat}<span>{group.totalCount}</span></h3>
-                                <ul>{group.cards.map((c, i) => <li key={i} className="cursor-pointer" onClick={isArchRiderView ? () => setPickerCard(c) : undefined} onMouseEnter={() => setHoveredCard(c)} onMouseLeave={() => setHoveredCard(null)} onMouseMove={handleMouseMove}>
+                                <ul>{group.cards.map((c, i) => <li key={i} className="cursor-pointer" onClick={() => setDetailCard(c)} onMouseEnter={() => setHoveredCard(c)} onMouseLeave={() => setHoveredCard(null)} onMouseMove={handleMouseMove}>
                                     {isArchRiderView && c.isOverridden && <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5" title="Manually categorized" />}
                                     {c.name}
                                     {c.quantity > 1 && (
@@ -272,13 +272,14 @@ const DeckDisplayTable = () => {
                 {hoveredCard && <CardPreview cardName={hoveredCard.name} imageUrl={getImageUrl(hoveredCard.printingID)} x={mousePos.x} y={mousePos.y} windowHeight={window.innerHeight} />}
             </div>
 
-            {pickerCard && (
-                <CategoryPicker
-                    card={pickerCard}
+            {detailCard && (
+                <CardDetailModal
+                    card={detailCard}
+                    showCategoryEditor={isArchRiderView}
                     saving={savingOverride}
                     onSelect={handleSelectCategory}
                     onClear={handleClearOverride}
-                    onClose={() => setPickerCard(null)}
+                    onClose={() => setDetailCard(null)}
                 />
             )}
         </div>

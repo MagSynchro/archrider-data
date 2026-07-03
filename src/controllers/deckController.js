@@ -40,7 +40,7 @@ exports.getDeckById = async (req, res) => {
         const metaQuery = `
             SELECT DISTINCT ON (c.oracle_id)
                 c.oracle_id, c.name, c.card_category, c.normalized_category,
-                cf.type_line, cf.mana_cost
+                cf.type_line, cf.mana_cost, cf.oracle_text
             FROM cards c
             LEFT JOIN card_faces cf ON cf.parent_oracle_id = c.oracle_id
             WHERE c.oracle_id = ANY($1)
@@ -48,7 +48,7 @@ exports.getDeckById = async (req, res) => {
         `;
         const { rows: metaRows } = await db.query(metaQuery, [uniqueIds]);
 
-        // 4. Create a map for quick lookup: { oracle_id: { name, card_category, normalized_category, type_line, mana_cost } }
+        // 4. Create a map for quick lookup: { oracle_id: { name, card_category, normalized_category, type_line, mana_cost, oracle_text } }
         const cardMetaMap = metaRows.reduce((acc, row) => {
             acc[row.oracle_id] = row;
             return acc;
@@ -72,7 +72,7 @@ exports.getDeckById = async (req, res) => {
             return acc;
         }, {});
 
-        // 5. Enrich the deck object with names + taxonomy categories + type_line + manaCost
+        // 5. Enrich the deck object with names + taxonomy categories + type_line + manaCost + oracleText
         const enrich = (list) => list.map(c => {
             const meta = cardMetaMap[c.oracleID];
             const override = overrideMap[c.oracleID];
@@ -83,7 +83,8 @@ exports.getDeckById = async (req, res) => {
                 normalized_category: override?.normalized_category || meta?.normalized_category || null,
                 isOverridden: Boolean(override),
                 type_line: meta?.type_line || null,
-                manaCost: meta?.mana_cost || null
+                manaCost: meta?.mana_cost || null,
+                oracleText: meta?.oracle_text || null
             };
         });
 
