@@ -1,4 +1,3 @@
-scripts/jsonfetchfiles/
 node_modules/
 data/
 .env
