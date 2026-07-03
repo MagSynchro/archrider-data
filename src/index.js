@@ -17,6 +17,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 
 app.use('/api/decks', require('./routes/deckRoutes'));
+app.use('/api/auth', require('./routes/authRoutes'));
 
 app.listen(PORT, () => {
   console.log(`Archrider API running on port ${PORT}`);
