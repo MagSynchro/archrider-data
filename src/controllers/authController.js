@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('../../database/db.js');
-const { fetchAllDecksForOwner } = require('../utils/archidektDecks.js');
+const { fetchAllDecksForOwner, fetchOwnerInfo } = require('../utils/archidektDecks.js');
 
 // UX call, not a security one -- verification is self-securing regardless
 // of lifetime (see HANDOFF_REGISTRATION.md). 4 hours is forgiving of
@@ -13,6 +13,10 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const BCRYPT_ROUNDS = 10;
 const SESSION_COOKIE = 'archrider_session';
 const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+// Same cooldown window planned for the full login-triggered scout flow
+// (HANDOFF_CREDITS.md) -- reusing users.last_scout_at means this doesn't
+// need its own separate gate later.
+const LOGIN_SYNC_COOLDOWN_MS = 30 * 60 * 1000;
 
 const sessionCookieOptions = {
     httpOnly: true,
@@ -20,6 +24,37 @@ const sessionCookieOptions = {
     secure: process.env.NODE_ENV === 'production',
     maxAge: SESSION_MAX_AGE_MS
 };
+
+// Opportunistically refreshes a stale cached username: our login-triggered
+// scout flow queries this account's deck list anyway (see
+// HANDOFF_CREDITS.md), so a rename on Archidekt is caught here for free
+// instead of needing a separate sync mechanism. Cooldown-gated for the
+// same reason that flow's own free page-1 call is -- a burst of
+// logins/tab refreshes shouldn't turn this into an uncapped Archidekt
+// hit. Best-effort: a failed Archidekt call must never fail login itself,
+// and only updates last_scout_at on success so a failed attempt retries
+// on the next login rather than going quiet for the full cooldown.
+async function refreshArchidektUsernameIfStale(user) {
+    if (!user.archidekt_user_id) return; // nothing stable to look up by yet
+
+    const lastSync = user.last_scout_at ? new Date(user.last_scout_at).getTime() : 0;
+    if (Date.now() - lastSync < LOGIN_SYNC_COOLDOWN_MS) return;
+
+    try {
+        const info = await fetchOwnerInfo({ ownerId: user.archidekt_user_id });
+        if (info?.username && info.username !== user.archidekt_username) {
+            await db.query(
+                'UPDATE users SET archidekt_username = $1, last_scout_at = NOW() WHERE id = $2',
+                [info.username, user.id]
+            );
+            user.archidekt_username = info.username;
+        } else {
+            await db.query('UPDATE users SET last_scout_at = NOW() WHERE id = $1', [user.id]);
+        }
+    } catch (err) {
+        console.error('Archidekt username refresh failed (non-fatal):', err.message);
+    }
+}
 
 // Looks up a pending registration's claimed username on Archidekt (we
 // don't have their numeric owner ID yet at this point -- that's only
@@ -177,6 +212,8 @@ exports.login = async (req, res) => {
         if (!passwordMatches) {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
+
+        await refreshArchidektUsernameIfStale(user);
 
         const token = jwt.sign(
             {

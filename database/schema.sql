@@ -202,6 +202,10 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     archidekt_username VARCHAR(100) NOT NULL UNIQUE,
     archidekt_user_id INTEGER UNIQUE,
+    -- Cooldown-gate for Archidekt lookups triggered on login -- shared by
+    -- the opportunistic username refresh (authController.login) and the
+    -- eventual full login-triggered scout flow (HANDOFF_CREDITS.md).
+    last_scout_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_users_archidekt_user_id ON users(archidekt_user_id);

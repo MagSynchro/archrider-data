@@ -34,4 +34,27 @@ async function fetchAllDecksForOwner({ ownerId, ownerUsername }) {
     return allResults;
 }
 
-module.exports = { fetchAllDecksForOwner };
+// Single-page lookup, used when all that's needed is the account's
+// current owner info (username, total deck count) rather than every
+// deck -- owner data is identical across all of an account's decks, so
+// page 1 alone is enough. Returns null if the account has no public
+// decks at all (nothing to read owner info from).
+async function fetchOwnerInfo({ ownerId, ownerUsername }) {
+    if (!ownerId && !ownerUsername) {
+        throw new Error('fetchOwnerInfo requires ownerId or ownerUsername');
+    }
+
+    const query = ownerId
+        ? `ownerId=${encodeURIComponent(ownerId)}`
+        : `ownerUsername=${encodeURIComponent(ownerUsername)}`;
+
+    const response = await throttledFetch(`https://archidekt.com/api/decks/v3/?${query}&pageSize=50`);
+    if (!response.ok) throw new Error(`Archidekt lookup failed: ${response.status}`);
+    const data = await response.json();
+    const firstDeck = (data.results || [])[0];
+    if (!firstDeck) return null;
+
+    return { username: firstDeck.owner.username, count: data.count };
+}
+
+module.exports = { fetchAllDecksForOwner, fetchOwnerInfo };
