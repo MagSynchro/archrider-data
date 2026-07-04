@@ -43,6 +43,14 @@ const IDENTITY_MAP = {
 };
 
 export const getColorIdentityName = (symbolsArray) => {
+    // null/undefined means never individually probed (color_identity is
+    // only ever populated by probe.js -- see deckSync.js's upsert, which
+    // deliberately leaves it null since the cheap master-list sync has no
+    // per-card data to derive it from). Distinct from a probed, confirmed
+    // colorless deck ([]) -- collapsing the two would misreport "unknown"
+    // as "Colorless".
+    if (!symbolsArray) return "Unknown";
+    if (symbolsArray.length === 0) return "Colorless";
     // Sort alphabetically to ensure ['U', 'W'] matches ['W', 'U']
     const key = [...symbolsArray].sort().join(',');
     return IDENTITY_MAP[key] || "Colorless";
