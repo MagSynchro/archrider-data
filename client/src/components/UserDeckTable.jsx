@@ -17,40 +17,97 @@ import ColumnFilter from './ColumnFilter';
 const needsSync = (deck) =>
     !deck.last_synced || (deck.updated_at && new Date(deck.updated_at) > new Date(deck.last_synced));
 
+const formatDate = (value) => (value ? new Date(value).toLocaleString() : 'Never');
+
 // Same table as DeckTable, scoped to the logged-in user's own decks
 // (GET /api/decks/me) instead of every deck ArchRider knows about --
 // DeckTable stays as the admin view over the full dataset. No Owner
-// column here since every row belongs to the same user. The Sync
-// action is a placeholder: actually pulling fresh data from Archidekt
-// and spending a credit for it is ingestion work, explicitly future
-// scope (see HANDOFF_CREDITS.md), not built yet.
+// column here since every row belongs to the same user.
 const UserDeckTable = () => {
   const [data, setData] = useState([]);
   const [sorting, setSorting] = useState([]);
   const [columnFilters, setColumnFilters] = useState([]);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState(null);
+  const [probingId, setProbingId] = useState(null);
+  const [probeError, setProbeError] = useState(null);
 
-  useEffect(() => {
+  const loadDecks = () => {
     fetch('/api/decks/me', { credentials: 'include' })
       .then(res => res.json())
       .then(setData)
       .catch(err => console.error('Error fetching my decks:', err));
+  };
+
+  useEffect(() => {
+    loadDecks();
   }, []);
+
+  const handleSync = () => {
+    setSyncing(true);
+    setSyncMessage(null);
+    fetch('/api/decks/me/sync', { method: 'POST', credentials: 'include' })
+      .then(async res => {
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error || 'Sync failed');
+        loadDecks();
+        if (body.partial) {
+          setSyncMessage(
+            `Synced ${body.decksSynced} of ${body.totalDecks} decks (spent ${body.creditsSpent} credit${body.creditsSpent === 1 ? '' : 's'}). ` +
+            `Need ${body.creditsNeededForRest} more credit${body.creditsNeededForRest === 1 ? '' : 's'} to sync the rest. ${body.creditsRemaining} remaining.`
+          );
+        } else {
+          setSyncMessage(`Synced all ${body.decksSynced} decks (spent ${body.creditsSpent} credit${body.creditsSpent === 1 ? '' : 's'}). ${body.creditsRemaining} credits remaining.`);
+        }
+      })
+      .catch(err => setSyncMessage(err.message))
+      .finally(() => setSyncing(false));
+  };
+
+  const handleProbe = (deckId) => {
+    setProbingId(deckId);
+    setProbeError(null);
+    fetch(`/api/decks/${deckId}/probe`, { method: 'POST', credentials: 'include' })
+      .then(async res => {
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error || 'Probe failed');
+        loadDecks();
+      })
+      .catch(err => setProbeError(err.message))
+      .finally(() => setProbingId(null));
+  };
 
   const columns = useMemo(() => [
     {
-      header: 'Deck Name', accessorKey: 'name', cell: ({ row, getValue }) => (
-        <>
-          {needsSync(row.original) && (
-            <span
-              className="inline-block w-1.5 h-1.5 rounded-full bg-orange-500 mr-1.5"
-              title="Archidekt shows changes since this deck was last fully synced"
-            />
-          )}
-          <Link to={`/decks/${row.original.archidekt_id}`} className="text-blue-600 hover:text-blue-800 font-medium hover:underline">
-            {getValue()}
-          </Link>
-        </>
-      ), enableColumnFilter: false
+      header: 'Deck Name', accessorKey: 'name', cell: ({ row, getValue }) => {
+        const deck = row.original;
+        return (
+          <div className="flex items-center gap-2">
+            {needsSync(deck) && (
+              <span
+                className="inline-block w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0"
+                title="Archidekt shows changes since this deck was last fully synced"
+              />
+            )}
+            {deck.hasCardList ? (
+              <Link to={`/decks/${deck.archidekt_id}`} className="text-blue-600 hover:text-blue-800 font-medium hover:underline">
+                {getValue()}
+              </Link>
+            ) : (
+              <>
+                <span className="text-slate-500">{getValue()}</span>
+                <button
+                  onClick={() => handleProbe(deck.archidekt_id)}
+                  disabled={probingId === deck.archidekt_id}
+                  className="px-2 py-0.5 border rounded text-[10px] font-bold uppercase text-slate-500 border-slate-300 hover:border-slate-500 disabled:opacity-50"
+                >
+                  {probingId === deck.archidekt_id ? 'Probing...' : 'Probe (1 credit)'}
+                </button>
+              </>
+            )}
+          </div>
+        );
+      }, enableColumnFilter: false
     },
     {
       header: 'Bracket',
@@ -67,7 +124,19 @@ const UserDeckTable = () => {
       enableColumnFilter: true,
     },
     { header: 'Cards', accessorKey: 'card_count', enableColumnFilter: false },
-  ], []);
+    {
+      header: 'Updated At (Archidekt)',
+      accessorKey: 'updated_at',
+      cell: ({ getValue }) => <span className="text-xs text-slate-500">{formatDate(getValue())}</span>,
+      enableColumnFilter: false
+    },
+    {
+      header: 'Last Synced',
+      accessorKey: 'last_synced',
+      cell: ({ getValue }) => <span className="text-xs text-slate-500">{formatDate(getValue())}</span>,
+      enableColumnFilter: false
+    },
+  ], [probingId]);
 
   const table = useReactTable({
     data,
@@ -94,14 +163,19 @@ const UserDeckTable = () => {
     <div>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold text-slate-800">My Decks</h2>
-        <button
-          disabled
-          title="Syncing your decklist from Archidekt (spending a credit) is coming soon"
-          className="px-4 py-2 border rounded text-xs font-bold uppercase text-slate-400 border-slate-200 cursor-not-allowed"
-        >
-          Sync Decklist
-        </button>
+        <div className="text-right">
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="px-4 py-2 border rounded text-xs font-bold uppercase text-slate-700 border-slate-300 hover:border-slate-500 disabled:opacity-50"
+          >
+            {syncing ? 'Syncing...' : 'Sync Decklist'}
+          </button>
+          {syncMessage && <p className="text-xs text-slate-500 mt-1 max-w-xs">{syncMessage}</p>}
+        </div>
       </div>
+
+      {probeError && <p className="text-sm text-red-600 mb-4">{probeError}</p>}
 
       {data.length === 0 ? (
         <p className="text-sm text-slate-500">No decks found yet in ArchRider for your account.</p>
