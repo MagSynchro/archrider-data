@@ -57,6 +57,25 @@ async function scoutDecks(user) {
 
     console.log(`Total decks collected: ${allResults.length}`);
 
+    // Purge decks that no longer appear for this owner -- either deleted
+    // or made non-public on Archidekt since the last scout. Unconditional,
+    // not gated by `force`: a deck's absence from this response is a
+    // definitive fact about current Archidekt state, not a freshness
+    // question. Cascades to deck_card_lists (see migration 016) and
+    // deck_card_overrides (already cascaded). Safe because allResults is
+    // the complete list for this owner -- the pagination loop above would
+    // have thrown before reaching here on a partial/failed fetch.
+    const currentIds = new Set(allResults.map(d => d.id));
+    const { rows: existingDecks } = await db.query(
+      'SELECT archidekt_id, name FROM commander_decks WHERE owner_username = $1',
+      [user]
+    );
+    const staleDecks = existingDecks.filter(d => !currentIds.has(d.archidekt_id));
+    if (staleDecks.length > 0) {
+      await db.query('DELETE FROM commander_decks WHERE archidekt_id = ANY($1)', [staleDecks.map(d => d.archidekt_id)]);
+      console.log(`Removed ${staleDecks.length} deck(s) no longer public for ${user}: ${staleDecks.map(d => `${d.name} (${d.archidekt_id})`).join(', ')}`);
+    }
+
     const parsedData = JSON.parse(JSON.stringify(allResults));
     let deckCount = parsedData.length;
     let realtotal = 0;

@@ -116,8 +116,11 @@ CREATE TABLE IF NOT EXISTS card_taggings (
 CREATE INDEX IF NOT EXISTS idx_card_taggings_oracle_id ON card_taggings(oracle_id);
 CREATE INDEX IF NOT EXISTS idx_card_taggings_tag_id ON card_taggings(tag_id);
 
+-- ON DELETE CASCADE: scout.js purges commander_decks rows for decks that
+-- have been deleted/made non-public on Archidekt, and this row should go
+-- with it rather than being left orphaned (see migration 016).
 CREATE TABLE IF NOT EXISTS deck_card_lists (
-    deck_id BIGINT PRIMARY KEY REFERENCES commander_decks(archidekt_id),
+    deck_id BIGINT PRIMARY KEY REFERENCES commander_decks(archidekt_id) ON DELETE CASCADE,
     card_list JSONB NOT NULL,
     last_synced TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
