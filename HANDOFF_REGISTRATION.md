@@ -68,13 +68,18 @@ their own username.
    just unique) and stores it server-side against the pending
    registration: `{ key, claimed_username, email, password_hash,
    status: 'pending', expires_at, created_at }`.
-3. User is shown the key with instructions: create a **public** deck on
-   Archidekt (content doesn't matter, can be empty) named *exactly* that
-   key, then return to ArchRider and click Verify.
+3. User is shown the key with instructions: create a **public,
+   Commander-format** deck on Archidekt (content doesn't matter, can be
+   empty) named *exactly* that key, then return to ArchRider and click
+   Verify.
    - Must be public, not private — private decks don't appear via the
      unauthenticated public deck-listing endpoint, so there'd be nothing
      to check against without credentials. No privacy cost to this: an
      empty/dummy deck reveals nothing sensitive by being public.
+   - Must be Commander format (`deckFormat=3`) — the lookup endpoint is
+     filtered to Commander decks only, since that's the only format this
+     tool cares about (see archidektDecks.js). A dummy deck left in a
+     different format will silently never be found.
 4. Verify action calls the public
    `archidekt.com/api/decks/?owner=<username>&ownerexact=true`-style
    endpoint (same one `scout.js` already uses) and checks for a deck

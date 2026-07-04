@@ -20,7 +20,7 @@ async function fetchAllDecksForOwner({ ownerId, ownerUsername }) {
         ? `ownerId=${encodeURIComponent(ownerId)}`
         : `ownerUsername=${encodeURIComponent(ownerUsername)}`;
 
-    let nextUrl = `https://archidekt.com/api/decks/v3/?${query}&pageSize=50`;
+    let nextUrl = `https://archidekt.com/api/decks/v3/?${query}&deckFormat=3&pageSize=50`;
     const allResults = [];
 
     while (nextUrl) {
@@ -48,7 +48,7 @@ async function fetchOwnerInfo({ ownerId, ownerUsername }) {
         ? `ownerId=${encodeURIComponent(ownerId)}`
         : `ownerUsername=${encodeURIComponent(ownerUsername)}`;
 
-    const response = await throttledFetch(`https://archidekt.com/api/decks/v3/?${query}&pageSize=50`);
+    const response = await throttledFetch(`https://archidekt.com/api/decks/v3/?${query}&deckFormat=3&pageSize=50`);
     if (!response.ok) throw new Error(`Archidekt lookup failed: ${response.status}`);
     const data = await response.json();
     const firstDeck = (data.results || [])[0];

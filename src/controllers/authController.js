@@ -162,7 +162,7 @@ exports.register = async (req, res) => {
         res.status(201).json({
             registrationKey,
             expiresAt,
-            instructions: `Create a public Archidekt deck named exactly "${registrationKey}" under the username "${username}", then call verify.`
+            instructions: `Create a public Commander-format Archidekt deck named exactly "${registrationKey}" under the username "${username}", then call verify.`
         });
     } catch (err) {
         console.error('Error starting registration:', err);

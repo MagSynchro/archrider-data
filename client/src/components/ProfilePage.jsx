@@ -43,7 +43,7 @@ const ProfilePage = ({ session, onSessionChange }) => {
 
                 <div className="bg-white border border-slate-200 rounded p-6 space-y-4">
                     <p className="text-sm text-slate-700">
-                        Create a <strong>public</strong> Archidekt deck named exactly the key below under the username{' '}
+                        Create a <strong>public, Commander-format</strong> Archidekt deck named exactly the key below under the username{' '}
                         <strong>{session.claimedUsername}</strong>, then click Recheck. Content doesn't matter -- it can be empty.
                     </p>
                     <div className="bg-slate-50 border border-slate-200 rounded p-3">
@@ -142,7 +142,7 @@ const ConfirmedProfile = ({ session }) => {
             <div className="grid grid-cols-3 gap-4">
                 <div className="bg-white border border-slate-200 rounded p-4 text-center">
                     <p className="text-2xl font-bold text-slate-800">{session.archidektDeckCount ?? '--'}</p>
-                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mt-1">Public decks on Archidekt</p>
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mt-1">Public Commander decks on Archidekt</p>
                 </div>
                 <div className="bg-white border border-slate-200 rounded p-4 text-center">
                     <p className="text-2xl font-bold text-slate-800">{session.ourDeckCount}</p>
