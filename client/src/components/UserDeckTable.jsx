@@ -120,7 +120,7 @@ const UserDeckTable = () => {
       header: 'Color Identity',
       id: 'color_identity',
       accessorFn: (row) => getColorIdentityName(row.color_identity),
-      cell: ({ row }) => <NameplateBadge identity={row.original.color_identity} />,
+      cell: ({ row }) => <NameplateBadge identity={row.original.color_identity} approximate={!row.original.last_synced} />,
       enableColumnFilter: true,
     },
     { header: 'Cards', accessorKey: 'card_count', enableColumnFilter: false },
