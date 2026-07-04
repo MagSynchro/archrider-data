@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('../../database/db.js');
-const { throttledFetch } = require('../utils/archidektThrottle.js');
+const { fetchAllDecksForOwner } = require('../utils/archidektDecks.js');
 
 // UX call, not a security one -- verification is self-securing regardless
 // of lifetime (see HANDOFF_REGISTRATION.md). 4 hours is forgiving of
@@ -21,18 +21,15 @@ const sessionCookieOptions = {
     maxAge: SESSION_MAX_AGE_MS
 };
 
-// Paginates the same unofficial per-user deck listing endpoint scout.js
-// uses, looking for a deck whose name exactly matches the registration key.
-async function findDeckByExactName(username, exactName) {
-    let nextUrl = `https://archidekt.com/api/decks/v3/?ownerUsername=${encodeURIComponent(username)}&pageSize=50`;
-    while (nextUrl) {
-        const response = await throttledFetch(nextUrl);
-        if (!response.ok) throw new Error(`Archidekt lookup failed: ${response.status}`);
-        const data = await response.json();
-        if ((data.results || []).some(deck => deck.name === exactName)) return true;
-        nextUrl = data.next;
-    }
-    return false;
+// Looks up a pending registration's claimed username on Archidekt (we
+// don't have their numeric owner ID yet at this point -- that's only
+// discoverable from a deck response, which requires knowing the username
+// first) and returns the deck matching the registration key exactly, if
+// any. The match's `owner.id` is what gets captured onto the user record
+// on success -- see verify() below.
+async function findVerificationDeck(username, exactName) {
+    const decks = await fetchAllDecksForOwner({ ownerUsername: username });
+    return decks.find(deck => deck.name === exactName) || null;
 }
 
 // Starts a registration attempt: validates input, issues a single-use
@@ -123,17 +120,23 @@ exports.verify = async (req, res) => {
             return res.status(410).json({ error: 'This registration key has expired. Please register again.' });
         }
 
-        const found = await findDeckByExactName(pending.claimed_username, pending.registration_key);
-        if (!found) {
+        const match = await findVerificationDeck(pending.claimed_username, pending.registration_key);
+        if (!match) {
             return res.json({ verified: false, message: 'No matching deck found yet. Create it on Archidekt and try again.' });
         }
+
+        // Capture the stable numeric owner ID from the matched deck now,
+        // while we have it -- every future Archidekt lookup for this user
+        // should key on this, not the username, so a later rename on
+        // Archidekt can't orphan the account (see migration 013).
+        const archidektUserId = match.owner.id;
 
         const client = await db.pool.connect();
         try {
             await client.query('BEGIN');
             await client.query(
-                'INSERT INTO users (email, password_hash, archidekt_username) VALUES ($1, $2, $3)',
-                [pending.email, pending.password_hash, pending.claimed_username]
+                'INSERT INTO users (email, password_hash, archidekt_username, archidekt_user_id) VALUES ($1, $2, $3, $4)',
+                [pending.email, pending.password_hash, pending.claimed_username, archidektUserId]
             );
             await client.query(
                 "UPDATE pending_registrations SET status = 'verified' WHERE registration_key = $1",
@@ -176,7 +179,12 @@ exports.login = async (req, res) => {
         }
 
         const token = jwt.sign(
-            { sub: user.id, email: user.email, archidektUsername: user.archidekt_username },
+            {
+                sub: user.id,
+                email: user.email,
+                archidektUsername: user.archidekt_username,
+                archidektUserId: user.archidekt_user_id
+            },
             process.env.JWT_SECRET,
             { expiresIn: '7d' }
         );
@@ -185,7 +193,8 @@ exports.login = async (req, res) => {
         res.json({
             id: user.id,
             email: user.email,
-            archidektUsername: user.archidekt_username
+            archidektUsername: user.archidekt_username,
+            archidektUserId: user.archidekt_user_id
         });
     } catch (err) {
         console.error('Error logging in:', err);

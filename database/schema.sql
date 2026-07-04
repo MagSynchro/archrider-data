@@ -190,13 +190,21 @@ CREATE INDEX IF NOT EXISTS idx_deck_card_overrides_deck ON deck_card_overrides(d
 -- Archidekt -- ownership is proven by the user creating a public deck
 -- named exactly the single-use registration_key, which only the real
 -- account owner can do under their own Archidekt username.
+-- archidekt_user_id: the stable numeric Archidekt owner ID, captured at
+-- verification time (see authController.verify). archidekt_username
+-- stays for display/the initial claim, but is just a cached, potentially
+-- stale label going forward -- if a user renames on Archidekt, this ID
+-- is what keeps their account from getting orphaned. Nullable because
+-- it's only known after a successful verification.
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     archidekt_username VARCHAR(100) NOT NULL UNIQUE,
+    archidekt_user_id INTEGER UNIQUE,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_users_archidekt_user_id ON users(archidekt_user_id);
 
 -- status: 'pending' (key issued, not yet matched to a deck) or 'verified'
 -- (consumed -- a verified key must never be usable again, even on retry).
@@ -220,3 +228,24 @@ CREATE INDEX IF NOT EXISTS idx_pending_registrations_username ON pending_registr
 -- that's still valid, publicly-sourced content.
 ALTER TABLE commander_decks ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_commander_decks_user_id ON commander_decks(user_id);
+
+-- Backfill archidekt_user_id for users who verified before that column
+-- existed. No live Archidekt call needed -- commander_decks.owner_id is
+-- already cached from scout.js for any deck matching their claimed
+-- username, so this is a pure offline correlation against existing data.
+UPDATE users u
+SET archidekt_user_id = cd.owner_id
+FROM commander_decks cd
+WHERE cd.owner_username = u.archidekt_username
+  AND u.archidekt_user_id IS NULL
+  AND cd.owner_id IS NOT NULL;
+
+-- Additional deck-ownership backfill via the stable owner ID -- more
+-- robust than the owner_username-based match above, which breaks the
+-- moment a user renames on Archidekt after already being verified here.
+UPDATE commander_decks cd
+SET user_id = u.id
+FROM users u
+WHERE cd.owner_id = u.archidekt_user_id
+  AND u.archidekt_user_id IS NOT NULL
+  AND cd.user_id IS NULL;

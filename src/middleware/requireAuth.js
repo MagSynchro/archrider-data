@@ -15,7 +15,8 @@ module.exports = function requireAuth(req, res, next) {
         req.user = {
             id: payload.sub,
             email: payload.email,
-            archidektUsername: payload.archidektUsername
+            archidektUsername: payload.archidektUsername,
+            archidektUserId: payload.archidektUserId
         };
         next();
     } catch (err) {
