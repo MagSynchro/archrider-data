@@ -206,6 +206,17 @@ CREATE TABLE IF NOT EXISTS users (
     -- the opportunistic username refresh (authController.login) and the
     -- eventual full login-triggered scout flow (HANDOFF_CREDITS.md).
     last_scout_at TIMESTAMPTZ,
+    -- Cached total public deck count from Archidekt, captured for free at
+    -- verification (the full deck list is already in memory to find the
+    -- match) and refreshed alongside the username at login. Nullable --
+    -- unknown until the first verify()/login() populates it.
+    archidekt_deck_count INTEGER,
+    -- Schema shape only from HANDOFF_CREDITS.md -- the regen job and
+    -- deduct-then-refund spending logic aren't built yet, so nothing
+    -- spends credits. Defaults match the documented free-tier values.
+    credits_balance INTEGER NOT NULL DEFAULT 10,
+    credits_max INTEGER NOT NULL DEFAULT 10,
+    tier VARCHAR(20) NOT NULL DEFAULT 'free',
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_users_archidekt_user_id ON users(archidekt_user_id);

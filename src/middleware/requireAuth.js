@@ -1,9 +1,12 @@
 // requireAuth.js
 const jwt = require('jsonwebtoken');
 
-// Verifies the session cookie set by POST /api/auth/login and attaches
-// the decoded user onto req.user. Rejects with 401 if missing/invalid --
-// callers should mount this only on routes that require a logged-in user.
+// Verifies the session cookie and requires it to be a full verified-user
+// session (type: 'user'), not a pending-registration session -- see
+// requireSession.js for the version that accepts either. Attaches the
+// decoded user onto req.user. Rejects with 401/403 if missing/invalid/
+// not yet verified -- callers should mount this only on routes that need
+// a real logged-in user (e.g. deck ownership, profile updates).
 module.exports = function requireAuth(req, res, next) {
     const token = req.cookies?.archrider_session;
     if (!token) {
@@ -12,6 +15,9 @@ module.exports = function requireAuth(req, res, next) {
 
     try {
         const payload = jwt.verify(token, process.env.JWT_SECRET);
+        if (payload.type !== 'user') {
+            return res.status(403).json({ error: 'Please verify your account first' });
+        }
         req.user = {
             id: payload.sub,
             email: payload.email,
