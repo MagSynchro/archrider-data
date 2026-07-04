@@ -82,20 +82,22 @@ async function scoutDecks(user) {
     
     for (const deck of parsedData) {
       // Use parameterized values ($1, $2, etc.) to prevent SQL injection and errors
-      // Adjusted query to safely account for columns that will be updated later by probe.js
+      // Adjusted query to safely account for columns that will be updated later by probe.js.
+      // Deliberately does NOT touch last_synced -- that column tracks only
+      // when this specific deck was last fully synced via probe.js, not
+      // when the cheap master-list scan last ran (see migration 017).
       const query = `
-        INSERT INTO commander_decks 
-        (archidekt_id, name, card_count, format_id, color_identity, owner_username, owner_id, edh_bracket, created_at, updated_at, last_synced)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+        INSERT INTO commander_decks
+        (archidekt_id, name, card_count, format_id, color_identity, owner_username, owner_id, edh_bracket, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT (archidekt_id) DO UPDATE SET
           name = EXCLUDED.name,
           card_count = EXCLUDED.card_count,
-          format_id = EXCLUDED.format_id,      
+          format_id = EXCLUDED.format_id,
           owner_username = EXCLUDED.owner_username,
           owner_id = EXCLUDED.owner_id,
           edh_bracket = EXCLUDED.edh_bracket,
-          updated_at = EXCLUDED.updated_at,
-          last_synced = NOW()
+          updated_at = EXCLUDED.updated_at
         ${force ? '' : 'WHERE commander_decks.updated_at < EXCLUDED.updated_at'};
       `;
 

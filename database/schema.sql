@@ -23,8 +23,13 @@ CREATE TABLE IF NOT EXISTS commander_decks (
     owner_id INTEGER,
     edh_bracket VARCHAR(50),
     created_at TIMESTAMP,
+    -- Archidekt's own last-modified timestamp for the deck (refreshed by
+    -- scout.js's master-list scan). last_synced tracks only when THIS
+    -- deck was last fully synced via probe.js -- no default, NULL means
+    -- "never individually synced." updated_at > last_synced is the
+    -- "needs sync" signal used by UserDeckTable (see migration 017).
     updated_at TIMESTAMP,
-    last_synced TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    last_synced TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_owner_username ON commander_decks(owner_username);
 CREATE INDEX IF NOT EXISTS idx_edh_bracket ON commander_decks(edh_bracket);

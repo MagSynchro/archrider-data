@@ -9,6 +9,14 @@ import NameplateBadge from './NamePlateBadge';
 import { getColorIdentityName } from '../utils/colorUtils';
 import ColumnFilter from './ColumnFilter';
 
+// Archidekt's own last-modified timestamp for the deck (updated_at) newer
+// than our last full per-deck sync (last_synced, only ever touched by
+// probe.js -- see migration 017) means the user has changed something on
+// Archidekt that we haven't pulled yet. No last_synced at all means the
+// deck has never been individually synced.
+const needsSync = (deck) =>
+    !deck.last_synced || (deck.updated_at && new Date(deck.updated_at) > new Date(deck.last_synced));
+
 // Same table as DeckTable, scoped to the logged-in user's own decks
 // (GET /api/decks/me) instead of every deck ArchRider knows about --
 // DeckTable stays as the admin view over the full dataset. No Owner
@@ -31,9 +39,17 @@ const UserDeckTable = () => {
   const columns = useMemo(() => [
     {
       header: 'Deck Name', accessorKey: 'name', cell: ({ row, getValue }) => (
-        <Link to={`/decks/${row.original.archidekt_id}`} className="text-blue-600 hover:text-blue-800 font-medium hover:underline">
-          {getValue()}
-        </Link>
+        <>
+          {needsSync(row.original) && (
+            <span
+              className="inline-block w-1.5 h-1.5 rounded-full bg-orange-500 mr-1.5"
+              title="Archidekt shows changes since this deck was last fully synced"
+            />
+          )}
+          <Link to={`/decks/${row.original.archidekt_id}`} className="text-blue-600 hover:text-blue-800 font-medium hover:underline">
+            {getValue()}
+          </Link>
+        </>
       ), enableColumnFilter: false
     },
     {

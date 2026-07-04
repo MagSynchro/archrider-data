@@ -48,17 +48,24 @@ async function probeDeck(id) {
     const cardCount = data.cards.reduce((sum, c) => sum + c.quantity, 0);
 
     // 2. Sync Metadata - This happens first
+    // updated_at comes from Archidekt's own data.updatedAt, not NOW() --
+    // it has to reflect when the user last changed the deck on Archidekt,
+    // not when we happened to sync it, or the updated_at > last_synced
+    // "needs sync" signal (see migration 017) would never be accurate.
+    // last_synced IS the sync-time stamp -- this is the one place that's
+    // supposed to update it, since this is the actual per-deck sync.
     await db.query(`
       INSERT INTO commander_decks (
-        archidekt_id, name, card_count, color_identity, owner_username, updated_at
+        archidekt_id, name, card_count, color_identity, owner_username, updated_at, last_synced
       )
-      VALUES ($1, $2, $3, $4, $5, NOW())
-      ON CONFLICT (archidekt_id) DO UPDATE 
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      ON CONFLICT (archidekt_id) DO UPDATE
       SET name = EXCLUDED.name,
           card_count = EXCLUDED.card_count,
           color_identity = EXCLUDED.color_identity,
-          updated_at = NOW(); -- Keeps this row updated with the sync time
-    `, [id, data.name, cardCount, JSON.stringify(colorIdentity), data.owner.username]);
+          updated_at = EXCLUDED.updated_at,
+          last_synced = NOW();
+    `, [id, data.name, cardCount, JSON.stringify(colorIdentity), data.owner.username, data.updatedAt]);
     
     console.log(`Metadata synced for ${id}.`);
 
