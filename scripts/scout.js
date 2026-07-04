@@ -4,9 +4,10 @@ const path = require('path');
 const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
-const db = require('../database/db.js');
 const { writeJsonFile } = require('./utils/fileHelper.js');
 const { throttledFetch } = require('../src/utils/archidektThrottle.js');
+const { upsertDeckList } = require('../src/utils/deckSync.js');
+const { PAGE_SIZE } = require('../src/utils/archidektDecks.js');
 
 // Grab the username from the command line: node scout.js <username>
 const username = process.argv[2];
@@ -23,7 +24,7 @@ async function triggerProbe(id) {
     // Resolve the absolute path to probe.js
     const probePath = path.join(__dirname, 'probe.js');
     console.log(`...Triggering deep probe for ${id} using ${probePath}`);
-    
+
     // Execute using the absolute path
     await execPromise(`node "${probePath}" ${id}`);
   } catch (err) {
@@ -37,7 +38,7 @@ async function scoutDecks(user) {
 
     let allResults = [];
     // Start with the first page
-    let nextUrl = `https://archidekt.com/api/decks/v3/?ownerUsername=${user}&deckFormat=3&pageSize=50`;
+    let nextUrl = `https://archidekt.com/api/decks/v3/?ownerUsername=${user}&deckFormat=3&pageSize=${PAGE_SIZE}`;
 
     while (nextUrl) {
       console.log(`Fetching: ${nextUrl}`);
@@ -57,68 +58,23 @@ async function scoutDecks(user) {
 
     console.log(`Total decks collected: ${allResults.length}`);
 
-    // Purge decks that no longer appear for this owner -- either deleted
-    // or made non-public on Archidekt since the last scout. Unconditional,
-    // not gated by `force`: a deck's absence from this response is a
-    // definitive fact about current Archidekt state, not a freshness
-    // question. Cascades to deck_card_lists (see migration 016) and
-    // deck_card_overrides (already cascaded). Safe because allResults is
-    // the complete list for this owner -- the pagination loop above would
-    // have thrown before reaching here on a partial/failed fetch.
-    const currentIds = new Set(allResults.map(d => d.id));
-    const { rows: existingDecks } = await db.query(
-      'SELECT archidekt_id, name FROM commander_decks WHERE owner_username = $1',
-      [user]
-    );
-    const staleDecks = existingDecks.filter(d => !currentIds.has(d.archidekt_id));
-    if (staleDecks.length > 0) {
-      await db.query('DELETE FROM commander_decks WHERE archidekt_id = ANY($1)', [staleDecks.map(d => d.archidekt_id)]);
-      console.log(`Removed ${staleDecks.length} deck(s) no longer public for ${user}: ${staleDecks.map(d => `${d.name} (${d.archidekt_id})`).join(', ')}`);
-    }
-
     const parsedData = JSON.parse(JSON.stringify(allResults));
     let deckCount = parsedData.length;
     let realtotal = 0;
-    
-    for (const deck of parsedData) {
-      // Use parameterized values ($1, $2, etc.) to prevent SQL injection and errors
-      // Adjusted query to safely account for columns that will be updated later by probe.js.
-      // Deliberately does NOT touch last_synced -- that column tracks only
-      // when this specific deck was last fully synced via probe.js, not
-      // when the cheap master-list scan last ran (see migration 017).
-      const query = `
-        INSERT INTO commander_decks
-        (archidekt_id, name, card_count, format_id, color_identity, owner_username, owner_id, edh_bracket, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        ON CONFLICT (archidekt_id) DO UPDATE SET
-          name = EXCLUDED.name,
-          card_count = EXCLUDED.card_count,
-          format_id = EXCLUDED.format_id,
-          owner_username = EXCLUDED.owner_username,
-          owner_id = EXCLUDED.owner_id,
-          edh_bracket = EXCLUDED.edh_bracket,
-          updated_at = EXCLUDED.updated_at
-        ${force ? '' : 'WHERE commander_decks.updated_at < EXCLUDED.updated_at'};
-      `;
 
-      // Populating the exact order for $1 through $10
-      const values = [
-        deck.id,
-        deck.name,
-        deck.size,
-        deck.deckFormat,
-        null, // color_identity (will be updated by probe.js)
-        deck.owner.username,
-        deck.owner.id,
-        deck.edhBracket || null,
-        deck.createdAt,
-        deck.updatedAt
-      ];
-            
+    // upsertDeckList also purges commander_decks rows no longer present
+    // for this owner (deleted/made non-public since the last scout) --
+    // see src/utils/deckSync.js. Safe here because parsedData is the
+    // complete list for this owner; the pagination loop above would have
+    // thrown before reaching this point on a partial/failed fetch.
+    const { results, staleDecks } = await upsertDeckList(parsedData, { ownerUsername: user, force });
+    if (staleDecks.length > 0) {
+      console.log(`Removed ${staleDecks.length} deck(s) no longer public for ${user}: ${staleDecks.map(d => `${d.name} (${d.archidekt_id})`).join(', ')}`);
+    }
+
+    for (const { deck, wasUpdated } of results) {
       try {
-        const result = await db.query(query, values);
-        
-        if (result.rowCount === 0 && !force) {
+        if (!wasUpdated && !force) {
           console.log(`Deck ${deck.id} (${deck.name}) already up-to-date.`);
         } else {
           console.log(`Deck ${deck.id} (${deck.name}) inserted/updated successfully.`);
@@ -126,17 +82,15 @@ async function scoutDecks(user) {
         }
 
         // Fixed conditional: Evaluates insert/update OR force status correctly inside parentheses
-        if (result.rowCount > 0 || force) {
+        if (wasUpdated || force) {
           // probe.js runs as its own child process, so it can't share this
           // process's throttledFetch state -- this delay is what actually
           // paces the Archidekt call each spawned probe.js makes.
           await delay(2000);
           await triggerProbe(deck.id);
         }
-
       } catch (error) {
-        console.error(`Error inserting deck ${deck.id} (${deck.name}):`, error.message);
-        console.error("Full Detail:", error.detail || "No further detail");
+        console.error(`Error processing deck ${deck.id} (${deck.name}):`, error.message);
       }
     }
     console.log(`Total decks found for user ${user}: ${deckCount}, Real total: ${realtotal}`);

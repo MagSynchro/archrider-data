@@ -22,11 +22,16 @@ response, `totalPages = ceil(count / 50)`. This single function is used
 in both places credit cost is computed (see below) — don't duplicate
 the math.
 
-Important caveat on the `50`: this is Archidekt's actual observed page
-size from a real response, not a guess — but only confirmed against one
-account so far. Worth a sanity check against a second real account with
-a different deck count before fully relying on it being constant across
-all accounts/response types.
+Update on the `50`: the sanity check this section called for turned up
+a real problem. Requesting `pageSize=25`, `50`, and `100` against the
+same real multi-page account (moraff, 83 Commander decks) returned
+exactly 60 results every single time — Archidekt's per-owner deck
+endpoint ignores the pageSize query param entirely. The constant is now
+60 (see `PAGE_SIZE` in `src/utils/archidektDecks.js`), not 50. This is
+unofficial, undocumented behavior with no API contract, so it could
+drift again without notice; if the credit-cost math ever looks off,
+re-derive it the same way (a few different pageSize values against a
+real multi-page account) rather than assuming the constant still holds.
 
 Important caveat on sort order: the "skip the prompt if nothing past
 page 1 could be new" optimization (below) depends on Archidekt
