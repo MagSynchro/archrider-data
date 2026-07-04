@@ -1,62 +1,85 @@
 // App.jsx
 import { useEffect, useState } from 'react';
-// 1. Add these imports
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import DeckTable from './components/DeckTable';
 import DeckDisplayTable from './components/DeckDisplayTable';
+import UserDeckTable from './components/UserDeckTable';
+import ProfilePage from './components/ProfilePage';
 import AuthPage from './components/AuthPage';
+import NavBar from './components/NavBar';
 
-function App() {
+// Everything session-dependent lives inside the Router so it can use
+// useNavigate to land on /profile after login/registration, regardless
+// of whatever URL the browser happened to be on beforehand.
+function AppShell() {
+  const [session, setSession] = useState(undefined); // undefined = checking, null = no session, object = GET /api/auth/profile response
   const [decks, setDecks] = useState([]);
-  // undefined = still checking the session, null = logged out, object = logged in
-  const [user, setUser] = useState(undefined);
+  const navigate = useNavigate();
+
+  const refreshSession = () => {
+    return fetch('/api/auth/profile', { credentials: 'include' })
+      .then(res => (res.ok ? res.json() : null))
+      .then(setSession)
+      .catch(() => setSession(null));
+  };
 
   useEffect(() => {
-    fetch('/api/auth/me', { credentials: 'include' })
-      .then(res => (res.ok ? res.json() : null))
-      .then(setUser)
-      .catch(() => setUser(null));
+    refreshSession();
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (session?.status !== 'confirmed') return;
     fetch('/api/decks')
       .then(res => res.json())
-      .then(data => setDecks(data))
+      .then(setDecks)
       .catch(err => console.error("Error:", err));
-  }, [user]);
+  }, [session]);
+
+  // Upon login / registration the user should land on Profile -- see the
+  // profile-page design pass.
+  const handleAuthenticated = () => {
+    refreshSession().then(() => navigate('/profile'));
+  };
 
   const handleLogout = () => {
     fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
-      .finally(() => setUser(null));
+      .finally(() => {
+        setSession(null);
+        navigate('/');
+      });
   };
 
-  if (user === undefined) {
+  if (session === undefined) {
     return <div className="p-10 text-center text-slate-400">Loading...</div>;
   }
 
-  if (user === null) {
-    return <AuthPage onLogin={setUser} />;
+  if (session === null) {
+    return <AuthPage onAuthenticated={handleAuthenticated} />;
   }
 
-  return (
-    // 2. Wrap everything in a Router
-    <Router>
-      <div className="p-10">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">ArchRider Dashboard</h1>
-          <div className="flex items-center gap-4 text-sm text-slate-500">
-            <span>{user.archidektUsername}</span>
-            <button onClick={handleLogout} className="text-blue-600 hover:underline">Log Out</button>
-          </div>
-        </div>
+  const isConfirmed = session.status === 'confirmed';
 
-        {/* 3. Define your routes here */}
-        <Routes>
-          <Route path="/" element={<DeckTable data={decks} />} />
-          <Route path="/decks/:deckID" element={<DeckDisplayTable />} />
-        </Routes>
-      </div>
+  return (
+    <div className="p-10">
+      <NavBar session={session} isConfirmed={isConfirmed} onLogout={handleLogout} />
+
+      <Routes>
+        <Route path="/profile" element={<ProfilePage session={session} onSessionChange={refreshSession} />} />
+        {isConfirmed && <Route path="/" element={<DeckTable data={decks} />} />}
+        {isConfirmed && <Route path="/my-decks" element={<UserDeckTable />} />}
+        {isConfirmed && <Route path="/decks/:deckID" element={<DeckDisplayTable />} />}
+        {/* Not-yet-confirmed sessions (pending/expired/verified_elsewhere) only
+            ever have Profile to show -- send anything else there too. */}
+        <Route path="*" element={<Navigate to="/profile" replace />} />
+      </Routes>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <AppShell />
     </Router>
   );
 }

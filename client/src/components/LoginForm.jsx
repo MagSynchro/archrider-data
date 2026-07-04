@@ -1,9 +1,10 @@
 // LoginForm.jsx
 import React, { useState } from 'react';
 
-// Email/password login. Calls onLogin(user) on success so the parent can
-// switch out of the auth gate -- the session itself lives in the httpOnly
-// cookie the backend sets, this component doesn't touch it directly.
+// Email/password login. Calls onLogin() on success so the parent can
+// refetch the session and switch out of the auth gate -- the session
+// itself lives in the httpOnly cookie the backend sets, this component
+// doesn't touch it directly.
 const LoginForm = ({ onLogin, onSwitchToRegister }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
