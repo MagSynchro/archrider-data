@@ -4,6 +4,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('../../database/db.js');
 const { fetchAllDecksForOwner, fetchOwnerInfo } = require('../utils/archidektDecks.js');
+const { getTierInfo, getRoleInfo } = require('../utils/tiers.js');
 
 // UX call, not a security one -- verification is self-securing regardless
 // of lifetime (see HANDOFF_REGISTRATION.md). 4 hours is forgiving of
@@ -349,6 +350,9 @@ exports.getProfile = async (req, res) => {
             [user.id]
         );
 
+        const tierInfo = getTierInfo(user.tier);
+        const roleInfo = getRoleInfo(user.role);
+
         res.json({
             status: 'confirmed',
             email: user.email,
@@ -357,7 +361,14 @@ exports.getProfile = async (req, res) => {
             confirmedAt: user.created_at,
             archidektDeckCount: user.archidekt_deck_count,
             ourDeckCount: parseInt(countRows[0].count, 10),
-            credits: { balance: user.credits_balance, max: user.credits_max, tier: user.tier }
+            role: { value: user.role, label: roleInfo.label },
+            credits: {
+                balance: user.credits_balance,
+                max: user.credits_max,
+                tier: user.tier,
+                tierLabel: tierInfo.label,
+                regenPerCycle: tierInfo.regenPerCycle
+            }
         });
     } catch (err) {
         console.error('Error fetching profile:', err);

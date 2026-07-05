@@ -224,7 +224,20 @@ CREATE TABLE IF NOT EXISTS users (
     -- spends credits. Defaults match the documented free-tier values.
     credits_balance INTEGER NOT NULL DEFAULT 10,
     credits_max INTEGER NOT NULL DEFAULT 10,
-    tier VARCHAR(20) NOT NULL DEFAULT 'free',
+    -- Named tier ladder (see HANDOFF_CREDITS.md / migration 018):
+    -- wayfarer (free, default) < pathfinder / banneret (paid, entry) <
+    -- cartographer (paid, top). "Initiate" is the unregistered state --
+    -- no row exists yet, so it's never stored here. Regen amounts and
+    -- tier-upgrade/payment flow are display-only for now; see
+    -- src/utils/tiers.js.
+    tier VARCHAR(20) NOT NULL DEFAULT 'wayfarer'
+        CHECK (tier IN ('wayfarer', 'pathfinder', 'banneret', 'cartographer')),
+    -- Staff permission level, orthogonal to tier -- a user's paid tier
+    -- says nothing about whether they're also a moderator/admin. Actions
+    -- gated on this (ban, delete decks, add credits, etc.) aren't built
+    -- yet; this column is display-only for now too.
+    role VARCHAR(20) NOT NULL DEFAULT 'user'
+        CHECK (role IN ('user', 'moderator', 'admin')),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_users_archidekt_user_id ON users(archidekt_user_id);

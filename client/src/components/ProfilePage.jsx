@@ -146,6 +146,7 @@ const ConfirmedProfile = ({ session }) => {
                 <h2 className="text-xl font-bold text-slate-800">{session.email}</h2>
                 <p className="text-sm text-slate-500">
                     Archidekt: <strong>{session.archidektUsername}</strong> &middot; confirmed {new Date(session.confirmedAt).toLocaleDateString()}
+                    {session.role.value !== 'user' && <> &middot; <strong>{session.role.label}</strong></>}
                 </p>
             </div>
 
@@ -160,7 +161,8 @@ const ConfirmedProfile = ({ session }) => {
                 </div>
                 <div className="bg-white border border-slate-200 rounded p-4 text-center">
                     <p className="text-2xl font-bold text-slate-800">{session.credits.balance} / {session.credits.max}</p>
-                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mt-1">API credits ({session.credits.tier})</p>
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mt-1">API credits ({session.credits.tierLabel})</p>
+                    <p className="text-[11px] text-slate-400 mt-1">+{session.credits.regenPerCycle} at next regen</p>
                 </div>
             </div>
 
