@@ -33,7 +33,38 @@ const humanizeCategoryCode = (code) =>
 // (the 5 clean bracket-template buckets), then card_category (fine-grained),
 // then a coarse card-type bucket derived from type_line, then a final
 // catch-all.
-const getGroupLabel = (card) => {
+//
+// coreSynergies (a Set of card_category strings, empty if the deck hasn't
+// designated any) narrows the broad SYNERGY bucket: a card whose
+// card_category matches one of the deck's chosen synergies gets its own
+// "Core Synergy: X" group; everything else that's SYNERGY-classified but
+// doesn't match falls back through card_category_secondary (a genuinely
+// different runner-up category, see migration 021) before finally
+// dropping to a raw card-type bucket -- rather than everything just
+// piling into one generic "Synergy" group regardless of relevance. When
+// no core synergy is chosen at all, behavior is unchanged from before
+// this feature existed.
+const getGroupLabel = (card, coreSynergies) => {
+    if (card.normalized_category === 'SYNERGY' && coreSynergies && coreSynergies.size > 0) {
+        if (coreSynergies.has(card.card_category)) {
+            return `Core Synergy: ${humanizeCategoryCode(card.card_category)}`;
+        }
+        // Also matches via the secondary category -- e.g. a card whose
+        // primary tag is SYN_DISCARD but whose runner-up is SYN_SAC_OUTLET
+        // still belongs with the deck's declared Sac Outlet theme. Without
+        // this check it would land in a bare "Sac Outlet" bucket instead,
+        // confusingly distinct from "Core Synergy: Sac Outlet".
+        if (card.card_category_secondary && coreSynergies.has(card.card_category_secondary)) {
+            return `Core Synergy: ${humanizeCategoryCode(card.card_category_secondary)}`;
+        }
+        if (card.card_category_secondary) {
+            return humanizeCategoryCode(card.card_category_secondary);
+        }
+        const typeBucket = getCardTypeBucket(card.type_line);
+        if (typeBucket) return typeBucket;
+        return 'Uncategorized';
+    }
+
     if (card.normalized_category) {
         return NORMALIZED_CATEGORY_LABELS[card.normalized_category]
             || humanizeCategoryCode(card.normalized_category);
@@ -92,7 +123,10 @@ const DeckDisplayTable = () => {
     useEffect(() => {
         if (!deckData) return;
 
-        const groupLabelFor = isArchRiderView ? getGroupLabel : getArchidektGroupLabel;
+        const coreSynergySet = new Set(deckData.coreSynergies || []);
+        const groupLabelFor = isArchRiderView
+            ? (card) => getGroupLabel(card, coreSynergySet)
+            : getArchidektGroupLabel;
 
         //1. Seperate cards into mainboard and sideboard
         const mainboard = deckData.card_list.mainboard || [];
@@ -159,7 +193,43 @@ const DeckDisplayTable = () => {
             .finally(() => setSavingOverride(false));
     };
 
+    // Adds/removes one of this deck's chosen "core synergy" categories
+    // (see migration 021) -- reloads the deck afterward so both the
+    // checkbox state and the regrouped card lists reflect the change.
+    const handleToggleCoreSynergy = (category, isSelected) => {
+        const request = isSelected
+            ? fetch(`/api/decks/${deckID}/core-synergies/${category}`, { method: 'DELETE' })
+            : fetch(`/api/decks/${deckID}/core-synergies`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ card_category: category })
+            });
+
+        request
+            .then(res => {
+                if (!res.ok) throw new Error(`Request failed (${res.status})`);
+                loadDeck();
+            })
+            .catch(err => console.error('Failed to update core synergy:', err.message));
+    };
+
     if (!deckData) return <div className="p-10 text-center">Loading deck library...</div>;
+
+    const coreSynergySet = new Set(deckData.coreSynergies || []);
+
+    // Candidate core synergies for the selector: distinct SYNERGY
+    // card_category values actually present among this deck's own
+    // (non-commander) cards, with a count -- not every SYN_* category
+    // that exists globally.
+    const synergyCounts = {};
+    (deckData.card_list.mainboard || []).forEach(c => {
+        if (!c.isCommander && c.normalized_category === 'SYNERGY' && c.card_category) {
+            synergyCounts[c.card_category] = (synergyCounts[c.card_category] || 0) + (c.quantity || 1);
+        }
+    });
+    const availableSynergies = Object.entries(synergyCounts)
+        .sort(([, a], [, b]) => b - a)
+        .map(([category, count]) => ({ category, count }));
 
     return (
         <div className="max-w-6xl mx-auto p-6">
@@ -212,6 +282,38 @@ const DeckDisplayTable = () => {
                 </div>
                 <ToggleSwitch checked={isArchRiderView} onChange={setIsArchRiderView} labelOff="Archidekt" labelOn="ArchRider" />
             </div>
+
+            {/* Core synergy selector -- ArchRider view only, and only when
+                the deck actually has SYNERGY-classified cards to choose
+                from. Picking one or more narrows those cards out of the
+                generic "Synergy" pile into their own specific group(s);
+                see getGroupLabel above. */}
+            {isArchRiderView && availableSynergies.length > 0 && (
+                <div className="mb-6 p-4 bg-white border border-slate-200 rounded">
+                    <h3 className="font-bold text-xs uppercase tracking-wider text-slate-500 mb-1">Core Synergies</h3>
+                    <p className="text-xs text-slate-400 mb-3">
+                        Choose this deck's actual build-around theme(s) to split them out from the generic Synergy group.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        {availableSynergies.map(({ category, count }) => {
+                            const selected = coreSynergySet.has(category);
+                            return (
+                                <label
+                                    key={category}
+                                    className={`flex items-center gap-1.5 text-xs px-2 py-1 border rounded cursor-pointer ${selected ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600'}`}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={selected}
+                                        onChange={() => handleToggleCoreSynergy(category, selected)}
+                                    />
+                                    {humanizeCategoryCode(category)} ({count})
+                                </label>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {/* Analysis Modal Integration */}
             {activeAnalysis && (

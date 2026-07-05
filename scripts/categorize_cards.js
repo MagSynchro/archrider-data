@@ -16,6 +16,16 @@
 // primary discriminator. priority (your curated judgment, from either
 // table) is the primary sort key; weight only breaks ties between
 // otherwise-equal-priority tags.
+//
+// Also persists a SECONDARY category (migration 021, card_category_
+// secondary / normalized_category_secondary) -- the runner-up candidate
+// (rn = 2) from the exact same ranking used to pick the primary (rn = 1),
+// rather than discarding it. Candidates are collapsed to one row per
+// (oracle_id, card_category) before ranking so that two different tags
+// mapping to the SAME category don't manufacture a fake "secondary" --
+// the secondary is only ever a genuinely different category. Used by the
+// deck view's core-synergy feature as a fallback grouping label for a
+// SYNERGY card that doesn't match a deck's chosen core synergy.
 require('dotenv').config();
 const db = require('../database/db.js');
 
@@ -63,6 +73,21 @@ async function run() {
                     SELECT 1 FROM tag_category_map tcm WHERE tcm.tag_slug = t.slug
                 )
             ),
+            -- Collapse to one row per (oracle_id, card_category) -- several
+            -- different tags can resolve to the same category (e.g. two
+            -- distinct typal tags both -> SYN_TYPAL); that must not count
+            -- as two separate candidates when picking a primary vs a
+            -- genuinely different secondary category.
+            collapsed AS (
+                SELECT
+                    oracle_id,
+                    card_category,
+                    normalized_category,
+                    MAX(priority) AS priority,
+                    MAX(weight_rank) AS weight_rank
+                FROM ranked
+                GROUP BY oracle_id, card_category, normalized_category
+            ),
             final_ranked AS (
                 SELECT
                     oracle_id,
@@ -72,14 +97,26 @@ async function run() {
                         PARTITION BY oracle_id
                         ORDER BY priority DESC, weight_rank DESC
                     ) AS rn
-                FROM ranked
+                FROM collapsed
+            ),
+            pivoted AS (
+                SELECT
+                    oracle_id,
+                    MAX(CASE WHEN rn = 1 THEN card_category END) AS card_category,
+                    MAX(CASE WHEN rn = 1 THEN normalized_category END) AS normalized_category,
+                    MAX(CASE WHEN rn = 2 THEN card_category END) AS card_category_secondary,
+                    MAX(CASE WHEN rn = 2 THEN normalized_category END) AS normalized_category_secondary
+                FROM final_ranked
+                WHERE rn <= 2
+                GROUP BY oracle_id
             )
             UPDATE cards c
-            SET card_category = r.card_category,
-                normalized_category = r.normalized_category
-            FROM final_ranked r
-            WHERE r.oracle_id = c.oracle_id
-              AND r.rn = 1
+            SET card_category = p.card_category,
+                normalized_category = p.normalized_category,
+                card_category_secondary = p.card_category_secondary,
+                normalized_category_secondary = p.normalized_category_secondary
+            FROM pivoted p
+            WHERE p.oracle_id = c.oracle_id
             RETURNING c.oracle_id;
         `);
 

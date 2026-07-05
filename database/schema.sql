@@ -51,6 +51,15 @@ CREATE TABLE IF NOT EXISTS cards (
     -- normalized_category: the fixed bracket-template set (RAMP, TARGETED_INT,
     -- MASS_INT, CARD_DRAW, SYNERGY). Stays short and fixed on purpose.
     normalized_category VARCHAR(20),
+    -- Runner-up category candidate (migration 021) -- categorize_cards.js's
+    -- resolution query already ranks every matching tag-derived category
+    -- per card; these two persist the rn=2 result instead of discarding
+    -- it. Used as a fallback grouping label in the deck view for a
+    -- SYNERGY card that doesn't match a deck's chosen core synergy (see
+    -- deck_core_synergies below), before falling back further to raw
+    -- card type. NULL when a card only has one matching category.
+    card_category_secondary TEXT,
+    normalized_category_secondary VARCHAR(20),
     keywords TEXT[]
 );
 CREATE INDEX IF NOT EXISTS idx_cards_name ON cards(name);
@@ -192,6 +201,25 @@ CREATE TABLE IF NOT EXISTS deck_card_overrides (
     PRIMARY KEY (deck_id, oracle_id)
 );
 CREATE INDEX IF NOT EXISTS idx_deck_card_overrides_deck ON deck_card_overrides(deck_id);
+
+-- Deck-scoped, user-chosen "core synergy" tags (migration 021) -- which
+-- of the deck's own SYN_* card_category values (the fine-grained
+-- classification under the broad SYNERGY normalized_category) actually
+-- represent this deck's build-around theme(s). A deck can have more than
+-- one (e.g. Sacrifice + Drain + Tokens for an Aristocrats deck). Used by
+-- the deck view to stop lumping every SYNERGY card into one generic
+-- pile: a card matching a chosen entry here gets its own specific
+-- bucket, everything else falls back through card_category_secondary,
+-- then raw card type. Same separate-table reasoning as
+-- deck_card_overrides above -- never touched by probe.js/deckSync.js, so
+-- a re-sync can't wipe a user's choice.
+CREATE TABLE IF NOT EXISTS deck_core_synergies (
+    deck_id BIGINT NOT NULL REFERENCES commander_decks(archidekt_id) ON DELETE CASCADE,
+    card_category TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (deck_id, card_category)
+);
+CREATE INDEX IF NOT EXISTS idx_deck_core_synergies_deck ON deck_core_synergies(deck_id);
 
 -- Registration + Archidekt ownership verification (see
 -- HANDOFF_REGISTRATION.md). No credentials are ever exchanged with

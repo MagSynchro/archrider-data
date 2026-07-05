@@ -13,5 +13,7 @@ router.post('/:id/probe', requireAuth, scoutController.probeDeck);
 router.get('/:id/mana-base', manaBaseController.getManaBaseReport);
 router.put('/:id/cards/:oracleId/category', deckController.setCardOverride);
 router.delete('/:id/cards/:oracleId/category', deckController.clearCardOverride);
+router.post('/:id/core-synergies', deckController.addCoreSynergy);
+router.delete('/:id/core-synergies/:category', deckController.removeCoreSynergy);
 router.get('/user/:username', deckController.getDecksByUser);
 module.exports = router;

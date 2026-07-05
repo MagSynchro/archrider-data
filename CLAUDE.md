@@ -92,6 +92,45 @@ by hand per card.
   falling through because they carry `mana-rock-with-set-s-mechanic` or
   `moxen`, not the plain `mana-rock` tag that was mapped).
 
+## Secondary category + deck_core_synergies — narrowing the SYNERGY bucket
+
+The broad `SYNERGY` normalized_category covers ~30 very different
+fine-grained `card_category` codes (`SYN_TYPAL`, `SYN_LIFEGAIN`,
+`SYN_SAC_OUTLET`, `SYN_DRAIN`, ...). Left alone, every one of those gets
+lumped into a single "Synergy" group in the deck view, even though most
+decks only actually build around one or two of them — the rest are just
+incidental synergy-flavored cards that happen to be in the 99.
+
+Two pieces work together to fix this:
+
+- **`cards.card_category_secondary` / `normalized_category_secondary`**
+  (migration 021). `categorize_cards.js`'s tag-resolution query already
+  ranks *every* matching category candidate per card (`ROW_NUMBER() OVER
+  (PARTITION BY oracle_id ORDER BY priority DESC, weight_rank DESC)`) and
+  used to discard everything but the winner (`rn = 1`). These columns
+  persist the runner-up (`rn = 2`) instead. Candidates are collapsed to
+  one row per `(oracle_id, card_category)` *before* ranking, so two
+  different tags resolving to the same category never manufacture a fake
+  secondary — it's only ever a genuinely different category, or `NULL`.
+- **`deck_core_synergies`** (deck_id, card_category) — deck-scoped,
+  user-chosen subset of the SYN_* categories actually present in that
+  deck, representing its real build-around theme(s). Multiple are
+  allowed (most Commander decks aren't single-theme). Same separate-table
+  reasoning as `deck_card_overrides` below: never touched by
+  `probe.js`/`deckSync.js`, so it survives re-syncs.
+
+`DeckDisplayTable.jsx`'s `getGroupLabel()` uses both: a SYNERGY card
+whose `card_category` (or `card_category_secondary`) matches one of the
+deck's chosen core synergies gets its own `"Core Synergy: X"` group;
+everything else SYNERGY-classified falls back to its own
+`card_category_secondary` label, then to a raw card-type bucket. **Check
+the secondary against the chosen set too, not just the primary** — a card
+whose secondary matches must join the same `"Core Synergy: X"` group, not
+land in a bare, confusingly-similar `"X"` group of its own (a real bug
+caught during manual testing before this shipped). When a deck hasn't
+designated any core synergy, behavior is identical to before this
+feature existed — one generic "Synergy" group.
+
 ## deck_card_overrides — why it's a separate table
 
 `probe.js` replaces `deck_card_lists.card_list` **wholesale** on every
@@ -138,6 +177,15 @@ Two non-obvious things already fixed once, don't reintroduce:
   only the first listed color; no explicit mulligan simulation. These
   are known gaps, not oversights — don't silently "fix" them without
   updating the documentation and re-validating against reference numbers.
+- **`{C}` (colorless pip) is tracked as its own pip requirement**, separate
+  from generic numeric symbols (`{2}`, `{X}`) which still contribute none.
+  This was a real bug once (`{C}` was silently dropped like generic mana),
+  which made colorless-pip cards invisible to castability checks entirely.
+  A land that produces "any one color" (Command Tower, City of Brass) does
+  **not** satisfy `{C}` — confirmed against real Scryfall `produced_mana`
+  data (those lands list W/U/B/R/G, never `C`), so `countManaSources()`'s
+  `C` bucket only fills from genuinely colorless sources (Sol Ring,
+  Ancient Tomb, Wastes, etc.) without needing any special-case exclusion.
 
 ## Archidekt data quirks
 
