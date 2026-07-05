@@ -81,7 +81,7 @@ async function refreshArchidektAccountInfoIfStale(user) {
     if (Date.now() - lastSync < LOGIN_SYNC_COOLDOWN_MS) return;
 
     try {
-        const info = await fetchOwnerInfo({ ownerId: user.archidekt_user_id });
+        const info = await fetchOwnerInfo({ ownerId: user.archidekt_user_id, tier: user.tier });
         const username = info?.username || user.archidekt_username;
         const deckCount = info ? info.count : user.archidekt_deck_count;
 

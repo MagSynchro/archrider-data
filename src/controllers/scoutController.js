@@ -20,6 +20,12 @@ exports.syncMyDecks = async (req, res) => {
         return res.status(400).json({ error: 'No linked Archidekt account id on file' });
     }
 
+    // Read fresh rather than trust the JWT -- a tier upgrade shouldn't
+    // require re-login to take effect on queue priority (see
+    // archidektThrottle.js).
+    const { rows: tierRows } = await db.query('SELECT tier FROM users WHERE id = $1', [userId]);
+    const tier = tierRows[0]?.tier;
+
     const chargedPage1 = await deductCredits(userId, 1);
     if (!chargedPage1) {
         return res.status(402).json({ error: 'Not enough API credits', creditsNeeded: 1 });
@@ -28,7 +34,7 @@ exports.syncMyDecks = async (req, res) => {
     const firstUrl = `https://archidekt.com/api/decks/v3/?ownerId=${encodeURIComponent(archidektUserId)}&deckFormat=3&pageSize=${PAGE_SIZE}&orderBy=-updatedAt`;
     let firstPageData;
     try {
-        const response = await throttledFetch(firstUrl);
+        const response = await throttledFetch(firstUrl, undefined, { tier });
         if (!response.ok) throw new Error(`Archidekt lookup failed: ${response.status}`);
         firstPageData = await response.json();
     } catch (err) {
@@ -51,7 +57,7 @@ exports.syncMyDecks = async (req, res) => {
             let nextUrl = firstPageData.next;
             try {
                 while (nextUrl) {
-                    const response = await throttledFetch(nextUrl);
+                    const response = await throttledFetch(nextUrl, undefined, { tier });
                     if (!response.ok) throw new Error(`Archidekt lookup failed: ${response.status}`);
                     const data = await response.json();
                     allResults.push(...(data.results || []));
@@ -130,13 +136,16 @@ exports.probeDeck = async (req, res) => {
             return res.status(403).json({ error: 'You do not own this deck' });
         }
 
+        const { rows: tierRows } = await db.query('SELECT tier FROM users WHERE id = $1', [userId]);
+        const tier = tierRows[0]?.tier;
+
         const charged = await deductCredits(userId, 1);
         if (!charged) {
             return res.status(402).json({ error: 'Not enough API credits', creditsNeeded: 1 });
         }
 
         try {
-            await probeDeckById(id);
+            await probeDeckById(id, { tier });
         } catch (err) {
             await refundCredits(userId, 1);
             console.error(`Error probing deck ${id}:`, err.message);

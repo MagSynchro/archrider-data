@@ -28,9 +28,9 @@ const mapCard = (c) => {
 // updated_at > last_synced "needs sync" signal (see migration 017) would
 // never be accurate. last_synced IS the sync-time stamp -- this is the
 // one place that's supposed to update it.
-async function probeDeckById(id) {
+async function probeDeckById(id, { tier } = {}) {
     const url = `https://archidekt.com/api/decks/${id}/`;
-    const response = await throttledFetch(url);
+    const response = await throttledFetch(url, undefined, { tier });
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = await response.json();

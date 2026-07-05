@@ -27,7 +27,7 @@ const PAGE_SIZE = 60;
 // account). Once a user's archidekt_user_id is captured at verification
 // (see authController.verify), every later lookup for that user should
 // go through here with ownerId set, not ownerUsername.
-async function fetchAllDecksForOwner({ ownerId, ownerUsername }) {
+async function fetchAllDecksForOwner({ ownerId, ownerUsername, tier }) {
     if (!ownerId && !ownerUsername) {
         throw new Error('fetchAllDecksForOwner requires ownerId or ownerUsername');
     }
@@ -40,7 +40,7 @@ async function fetchAllDecksForOwner({ ownerId, ownerUsername }) {
     const allResults = [];
 
     while (nextUrl) {
-        const response = await throttledFetch(nextUrl);
+        const response = await throttledFetch(nextUrl, undefined, { tier });
         if (!response.ok) throw new Error(`Archidekt lookup failed: ${response.status}`);
         const data = await response.json();
         allResults.push(...(data.results || []));
@@ -55,7 +55,7 @@ async function fetchAllDecksForOwner({ ownerId, ownerUsername }) {
 // deck -- owner data is identical across all of an account's decks, so
 // page 1 alone is enough. Returns null if the account has no public
 // decks at all (nothing to read owner info from).
-async function fetchOwnerInfo({ ownerId, ownerUsername }) {
+async function fetchOwnerInfo({ ownerId, ownerUsername, tier }) {
     if (!ownerId && !ownerUsername) {
         throw new Error('fetchOwnerInfo requires ownerId or ownerUsername');
     }
@@ -64,7 +64,7 @@ async function fetchOwnerInfo({ ownerId, ownerUsername }) {
         ? `ownerId=${encodeURIComponent(ownerId)}`
         : `ownerUsername=${encodeURIComponent(ownerUsername)}`;
 
-    const response = await throttledFetch(`https://archidekt.com/api/decks/v3/?${query}&deckFormat=3&pageSize=${PAGE_SIZE}`);
+    const response = await throttledFetch(`https://archidekt.com/api/decks/v3/?${query}&deckFormat=3&pageSize=${PAGE_SIZE}`, undefined, { tier });
     if (!response.ok) throw new Error(`Archidekt lookup failed: ${response.status}`);
     const data = await response.json();
     const firstDeck = (data.results || [])[0];
