@@ -6,8 +6,17 @@ import {
 import { Link } from 'react-router-dom';
 import BracketBadge from './BracketBadge';
 import NameplateBadge from './NamePlateBadge';
+import ConfirmDialog from './ConfirmDialog';
 import { getColorIdentityName } from '../utils/colorUtils';
 import ColumnFilter from './ColumnFilter';
+
+// Mirrors src/utils/archidektDecks.js's PAGE_SIZE -- kept in sync there,
+// not re-derived from a network round-trip, since this is only ever used
+// for a pre-flight estimate shown before Sync Decklist actually runs (the
+// real cost is always discovered server-side from Archidekt's own count,
+// per HANDOFF_CREDITS.md -- this estimate can be wrong if the account's
+// deck count has changed since the last known figure).
+const PAGE_SIZE = 60;
 
 // Archidekt's own last-modified timestamp for the deck (updated_at) newer
 // than our last full per-deck sync (last_synced, only ever touched by
@@ -23,7 +32,7 @@ const formatDate = (value) => (value ? new Date(value).toLocaleString() : 'Never
 // (GET /api/decks/me) instead of every deck ArchRider knows about --
 // DeckTable stays as the admin view over the full dataset. No Owner
 // column here since every row belongs to the same user.
-const UserDeckTable = () => {
+const UserDeckTable = ({ session, onCreditsChanged }) => {
   const [data, setData] = useState([]);
   const [sorting, setSorting] = useState([]);
   const [columnFilters, setColumnFilters] = useState([]);
@@ -31,6 +40,10 @@ const UserDeckTable = () => {
   const [syncMessage, setSyncMessage] = useState(null);
   const [probingId, setProbingId] = useState(null);
   const [probeError, setProbeError] = useState(null);
+  // { type: 'sync' } | { type: 'probe', deckId } | null -- gates both
+  // credit-spending actions behind an explicit Proceed click. Nothing is
+  // spent just by opening this.
+  const [pendingConfirm, setPendingConfirm] = useState(null);
 
   const loadDecks = () => {
     fetch('/api/decks/me', { credentials: 'include' })
@@ -43,7 +56,8 @@ const UserDeckTable = () => {
     loadDecks();
   }, []);
 
-  const handleSync = () => {
+  const runSync = () => {
+    setPendingConfirm(null);
     setSyncing(true);
     setSyncMessage(null);
     fetch('/api/decks/me/sync', { method: 'POST', credentials: 'include' })
@@ -51,6 +65,7 @@ const UserDeckTable = () => {
         const body = await res.json();
         if (!res.ok) throw new Error(body.error || 'Sync failed');
         loadDecks();
+        onCreditsChanged?.();
         if (body.partial) {
           setSyncMessage(
             `Synced ${body.decksSynced} of ${body.totalDecks} decks (spent ${body.creditsSpent} credit${body.creditsSpent === 1 ? '' : 's'}). ` +
@@ -64,7 +79,8 @@ const UserDeckTable = () => {
       .finally(() => setSyncing(false));
   };
 
-  const handleProbe = (deckId) => {
+  const runProbe = (deckId) => {
+    setPendingConfirm(null);
     setProbingId(deckId);
     setProbeError(null);
     fetch(`/api/decks/${deckId}/probe`, { method: 'POST', credentials: 'include' })
@@ -72,6 +88,7 @@ const UserDeckTable = () => {
         const body = await res.json();
         if (!res.ok) throw new Error(body.error || 'Probe failed');
         loadDecks();
+        onCreditsChanged?.();
       })
       .catch(err => setProbeError(err.message))
       .finally(() => setProbingId(null));
@@ -97,7 +114,7 @@ const UserDeckTable = () => {
               <>
                 <span className="text-slate-500">{getValue()}</span>
                 <button
-                  onClick={() => handleProbe(deck.archidekt_id)}
+                  onClick={() => setPendingConfirm({ type: 'probe', deckId: deck.archidekt_id })}
                   disabled={probingId === deck.archidekt_id}
                   className="px-2 py-0.5 border rounded text-[10px] font-bold uppercase text-slate-500 border-slate-300 hover:border-slate-500 disabled:opacity-50"
                 >
@@ -159,13 +176,17 @@ const UserDeckTable = () => {
     }
   });
 
+  const creditsBalance = session?.credits?.balance ?? 0;
+  const knownDeckCount = session?.archidektDeckCount;
+  const estimatedSyncCost = knownDeckCount != null ? Math.ceil(knownDeckCount / PAGE_SIZE) : null;
+
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold text-slate-800">My Decks</h2>
         <div className="text-right">
           <button
-            onClick={handleSync}
+            onClick={() => setPendingConfirm({ type: 'sync' })}
             disabled={syncing}
             className="px-4 py-2 border rounded text-xs font-bold uppercase text-slate-700 border-slate-300 hover:border-slate-500 disabled:opacity-50"
           >
@@ -213,6 +234,35 @@ const UserDeckTable = () => {
             ))}
           </tbody>
         </table>
+      )}
+
+      {pendingConfirm?.type === 'sync' && (
+        <ConfirmDialog
+          title="Sync Decklist"
+          estimateLabel="Estimated credit cost"
+          estimatedCost={estimatedSyncCost}
+          creditsBalance={creditsBalance}
+          note={
+            estimatedSyncCost != null
+              ? `Based on your last known deck count (${knownDeckCount}). The actual cost is confirmed from Archidekt and may differ if you've added or removed decks since.`
+              : "We don't yet know your deck count, so the exact cost can't be estimated -- it will cost at least 1 credit to check, possibly more."
+          }
+          proceeding={syncing}
+          onProceed={runSync}
+          onDecline={() => setPendingConfirm(null)}
+        />
+      )}
+
+      {pendingConfirm?.type === 'probe' && (
+        <ConfirmDialog
+          title="Probe Deck"
+          estimateLabel="Credit cost"
+          estimatedCost={1}
+          creditsBalance={creditsBalance}
+          proceeding={probingId === pendingConfirm.deckId}
+          onProceed={() => runProbe(pendingConfirm.deckId)}
+          onDecline={() => setPendingConfirm(null)}
+        />
       )}
     </div>
   );

@@ -66,7 +66,7 @@ function AppShell() {
       <Routes>
         <Route path="/profile" element={<ProfilePage session={session} onSessionChange={refreshSession} />} />
         {isConfirmed && <Route path="/" element={<DeckTable data={decks} />} />}
-        {isConfirmed && <Route path="/my-decks" element={<UserDeckTable />} />}
+        {isConfirmed && <Route path="/my-decks" element={<UserDeckTable session={session} onCreditsChanged={refreshSession} />} />}
         {isConfirmed && <Route path="/decks/:deckID" element={<DeckDisplayTable />} />}
         {/* Not-yet-confirmed sessions (pending/expired/verified_elsewhere) only
             ever have Profile to show -- send anything else there too. */}
