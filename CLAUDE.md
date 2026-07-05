@@ -131,6 +131,18 @@ caught during manual testing before this shipped). When a deck hasn't
 designated any core synergy, behavior is identical to before this
 feature existed — one generic "Synergy" group.
 
+Once a deck has designated core synergies, `CardDetailModal.jsx`'s manual
+override picker also offers them directly as override targets (alongside
+the 5 broad buckets), so a card whose *taxonomy-derived* category is
+something else entirely can still be tagged into a synergy it genuinely
+supports. Worked example that motivated this: Clement, the Worrywort is
+`RAMP`/`MANA_DORK` by default (its Frogs make mana), but its own ability
+cares about mana value (bounces a lesser-MV creature on ETB) — with
+`SYN_MANA_VALUE` set as a chosen core synergy, a user can override
+Clement directly into that group without losing the RAMP classification
+everywhere else the card appears (the override is deck-scoped, same as
+any other `deck_card_overrides` row).
+
 ## deck_card_overrides — why it's a separate table
 
 `probe.js` replaces `deck_card_lists.card_list` **wholesale** on every

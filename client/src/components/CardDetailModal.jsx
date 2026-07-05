@@ -16,7 +16,23 @@ const CATEGORY_OPTIONS = [
 // the ArchRider view -- overrides are about our taxonomy, so editing
 // them while looking at Archidekt's own categories would be confusing.
 // Parent owns the fetch calls; this component only reports the user's choice.
-const CardDetailModal = ({ card, showCategoryEditor, saving, onSelect, onClear, onClose }) => {
+//
+// coreSynergyOptions ({ value, label }[]) -- the deck's own chosen core
+// synergies (see migration 021), offered as additional, more specific
+// override targets alongside the 5 broad buckets. A card can be
+// taxonomy-derived as RAMP but still genuinely care about, say, mana
+// value (e.g. Clement, the Worrywort's bounce trigger) -- this lets a
+// user tag it into that specific synergy instead of only the broad
+// "Synergy" bucket. onSelect(normalizedCategory, cardCategory) -- the
+// broad buttons omit cardCategory (unchanged prior behavior); the core
+// synergy buttons always pass 'SYNERGY' + the specific code.
+const CardDetailModal = ({ card, showCategoryEditor, saving, onSelect, onClear, onClose, coreSynergyOptions = [] }) => {
+    const coreSynergyValues = coreSynergyOptions.map(opt => opt.value);
+    // The broad "Synergy" button should only look active for a SYNERGY
+    // card that ISN'T one of the deck's specific core synergies -- so
+    // exactly one button is ever highlighted, not two at once.
+    const isBroadSynergyActive = card.normalized_category === 'SYNERGY' && !coreSynergyValues.includes(card.card_category);
+
     return (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
             <div
@@ -37,21 +53,46 @@ const CardDetailModal = ({ card, showCategoryEditor, saving, onSelect, onClear, 
                     <div className="w-56 shrink-0">
                         <p className="text-xs text-slate-400 uppercase tracking-wider mb-4">Set category override</p>
                         <div className="space-y-2">
-                            {CATEGORY_OPTIONS.map(opt => (
-                                <button
-                                    key={opt.value}
-                                    disabled={saving}
-                                    onClick={() => onSelect(opt.value)}
-                                    className={`w-full text-left px-3 py-2 rounded border text-sm font-medium disabled:opacity-50 ${
-                                        card.normalized_category === opt.value
-                                            ? 'bg-slate-800 text-white border-slate-800'
-                                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400'
-                                    }`}
-                                >
-                                    {opt.label}
-                                </button>
-                            ))}
+                            {CATEGORY_OPTIONS.map(opt => {
+                                const isActive = opt.value === 'SYNERGY' ? isBroadSynergyActive : card.normalized_category === opt.value;
+                                return (
+                                    <button
+                                        key={opt.value}
+                                        disabled={saving}
+                                        onClick={() => onSelect(opt.value)}
+                                        className={`w-full text-left px-3 py-2 rounded border text-sm font-medium disabled:opacity-50 ${
+                                            isActive
+                                                ? 'bg-slate-800 text-white border-slate-800'
+                                                : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400'
+                                        }`}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                );
+                            })}
                         </div>
+
+                        {coreSynergyOptions.length > 0 && (
+                            <>
+                                <p className="text-xs text-slate-400 uppercase tracking-wider mt-4 mb-2">Or tag as a core synergy</p>
+                                <div className="space-y-2">
+                                    {coreSynergyOptions.map(opt => (
+                                        <button
+                                            key={opt.value}
+                                            disabled={saving}
+                                            onClick={() => onSelect('SYNERGY', opt.value)}
+                                            className={`w-full text-left px-3 py-2 rounded border text-sm font-medium disabled:opacity-50 ${
+                                                card.card_category === opt.value
+                                                    ? 'bg-blue-600 text-white border-blue-600'
+                                                    : 'bg-white text-slate-700 border-slate-200 hover:border-blue-400'
+                                            }`}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
 
                         {card.isOverridden && (
                             <button

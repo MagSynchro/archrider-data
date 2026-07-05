@@ -165,12 +165,18 @@ const DeckDisplayTable = () => {
         setCategorizedCards(groups);
     }, [deckData, isArchRiderView]);
 
-    const handleSelectCategory = (normalizedCategory) => {
+    // cardCategory is optional -- the 5 broad category buttons omit it
+    // (unchanged prior behavior); CardDetailModal's core-synergy buttons
+    // pass 'SYNERGY' + the deck's specific chosen code, so a card can be
+    // tagged into that theme even if its taxonomy-derived category is
+    // something else entirely (e.g. Clement, the Worrywort is RAMP by
+    // default but genuinely cares about mana value too).
+    const handleSelectCategory = (normalizedCategory, cardCategory = null) => {
         setSavingOverride(true);
         fetch(`/api/decks/${deckID}/cards/${detailCard.oracleID}/category`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ normalized_category: normalizedCategory })
+            body: JSON.stringify({ normalized_category: normalizedCategory, card_category: cardCategory })
         })
             .then(res => {
                 if (!res.ok) throw new Error(`Request failed (${res.status})`);
@@ -382,6 +388,7 @@ const DeckDisplayTable = () => {
                     onSelect={handleSelectCategory}
                     onClear={handleClearOverride}
                     onClose={() => setDetailCard(null)}
+                    coreSynergyOptions={(deckData.coreSynergies || []).map(category => ({ value: category, label: humanizeCategoryCode(category) }))}
                 />
             )}
         </div>
