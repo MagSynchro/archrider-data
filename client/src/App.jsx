@@ -1,7 +1,6 @@
 // App.jsx
 import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import DeckTable from './components/DeckTable';
 import DeckDisplayTable from './components/DeckDisplayTable';
 import UserDeckTable from './components/UserDeckTable';
 import ProfilePage from './components/ProfilePage';
@@ -14,7 +13,6 @@ import StaffApp from './components/StaffApp';
 // of whatever URL the browser happened to be on beforehand.
 function AppShell() {
   const [session, setSession] = useState(undefined); // undefined = checking, null = no session, object = GET /api/auth/profile response
-  const [decks, setDecks] = useState([]);
   const navigate = useNavigate();
 
   const refreshSession = () => {
@@ -27,14 +25,6 @@ function AppShell() {
   useEffect(() => {
     refreshSession();
   }, []);
-
-  useEffect(() => {
-    if (session?.status !== 'confirmed') return;
-    fetch('/api/decks')
-      .then(res => res.json())
-      .then(setDecks)
-      .catch(err => console.error("Error:", err));
-  }, [session]);
 
   // Upon login / registration the user should land on Profile -- see the
   // profile-page design pass.
@@ -66,11 +56,12 @@ function AppShell() {
 
       <Routes>
         <Route path="/profile" element={<ProfilePage session={session} onSessionChange={refreshSession} />} />
-        {isConfirmed && <Route path="/" element={<DeckTable data={decks} />} />}
         {isConfirmed && <Route path="/my-decks" element={<UserDeckTable session={session} onCreditsChanged={refreshSession} />} />}
         {isConfirmed && <Route path="/decks/:deckID" element={<DeckDisplayTable />} />}
         {/* Not-yet-confirmed sessions (pending/expired/verified_elsewhere) only
-            ever have Profile to show -- send anything else there too. */}
+            ever have Profile to show -- send anything else there too. Profile
+            is also home for confirmed sessions now that the old unauthenticated
+            "All Decks" view is gone (see NavBar.jsx). */}
         <Route path="*" element={<Navigate to="/profile" replace />} />
       </Routes>
     </div>

@@ -1,15 +1,6 @@
 // deckController.js
 const db = require('../../database/db.js');
 
-exports.getAllDecks = async (req, res) => {
-    try {
-        const { rows } = await db.query('SELECT * FROM commander_decks');
-        res.json(rows);
-    } catch (err) {
-        res.status(500).json({ error: "Failed to fetch decks" });
-    }
-};
-
 // Decks owned by the logged-in user (see migration 012's user_id column
 // and req.user, set by the requireAuth middleware this route is mounted
 // behind). hasCardList tells the frontend whether this deck has ever

@@ -28,10 +28,11 @@ const needsSync = (deck) =>
 
 const formatDate = (value) => (value ? new Date(value).toLocaleString() : 'Never');
 
-// Same table as DeckTable, scoped to the logged-in user's own decks
-// (GET /api/decks/me) instead of every deck ArchRider knows about --
-// DeckTable stays as the admin view over the full dataset. No Owner
-// column here since every row belongs to the same user.
+// Scoped to the logged-in user's own decks (GET /api/decks/me). The
+// cross-user "every deck ArchRider knows about" view now lives properly
+// access-controlled in the staff portal (/staff -> Decks tab), not
+// duplicated here -- no Owner column needed since every row belongs to
+// the same user anyway.
 const UserDeckTable = ({ session, onCreditsChanged }) => {
   const [data, setData] = useState([]);
   const [sorting, setSorting] = useState([]);

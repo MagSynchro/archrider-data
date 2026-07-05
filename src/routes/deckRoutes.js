@@ -6,7 +6,6 @@ const manaBaseController = require('../controllers/manaBaseController');
 const scoutController = require('../controllers/scoutController');
 const requireAuth = require('../middleware/requireAuth');
 
-router.get('/', deckController.getAllDecks);
 router.get('/me', requireAuth, deckController.getMyDecks); // Must come before /:id so "me" isn't captured as an id param
 router.post('/me/sync', requireAuth, scoutController.syncMyDecks); // Same reason -- before /:id
 router.get('/:id', deckController.getDeckById); // Assuming you have a method to get a deck by ID
