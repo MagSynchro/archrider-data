@@ -1,5 +1,5 @@
 // ProfilePage.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 // Landing page after login/registration (see the profile-page design
 // pass). Renders whatever GET /api/auth/profile currently reports:
@@ -11,6 +11,16 @@ const ProfilePage = ({ session, onSessionChange }) => {
     const [verifyMessage, setVerifyMessage] = useState(null);
     const [verifyError, setVerifyError] = useState(null);
     const [verifying, setVerifying] = useState(false);
+
+    // session is only otherwise refreshed on login/registration and full
+    // page reloads -- without this, navigating back here after spending
+    // credits/syncing elsewhere (UserDeckTable) would keep showing
+    // whatever balance/stats were current at that last refresh, not
+    // reality. Refetch every time this page is actually visited instead.
+    useEffect(() => {
+        onSessionChange();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handleRecheck = () => {
         setVerifyError(null);
