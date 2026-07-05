@@ -130,7 +130,12 @@ exports.getManaBaseReport = async (req, res) => {
             return { name: commander.name, manaCost: commander.manaCost, cmc, perColor };
         });
 
-        const referenceThresholds = colorIdentity.map(color => {
+        // Colorless is included unconditionally, same as weightedSources
+        // above -- a deck's colored identity says nothing about whether it
+        // runs {C}-costed cards (e.g. Warping Wail, Null Elemental Blast),
+        // so this reference table needs to be available regardless.
+        const referenceColors = [...colorIdentity, 'C'];
+        const referenceThresholds = referenceColors.map(color => {
             const colorSources = Math.round((sources[color] ?? 0) * 100) / 100;
             const byTurn = (turnList, pipsNeeded) => turnList.map(turn => {
                 const { sourcesNeeded } = minimumSourcesNeeded({

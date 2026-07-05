@@ -146,7 +146,11 @@ async function run() {
     }
 
     console.log('\n-- Reference thresholds (single/double pip by turn) --');
-    for (const color of colorIdentity) {
+    // Colorless is included unconditionally, same as the weighted-sources
+    // section above -- a deck's colored identity says nothing about
+    // whether it runs {C}-costed cards (e.g. Warping Wail, Null Elemental
+    // Blast), so this table needs to be available regardless.
+    for (const color of [...colorIdentity, 'C']) {
         const colorSources = sources[color] ?? 0;
         console.log(`\n  ${formatColor(color)} (${colorSources.toFixed(2)} sources in deck):`);
         for (const turn of [1, 2, 3]) {

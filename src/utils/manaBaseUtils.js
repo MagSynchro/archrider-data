@@ -28,6 +28,22 @@
 //    "count as a source of X OR Y" logic in the source-counting step,
 //    which is a documented v2 candidate.
 //
+// 2b. {C} (COLORLESS PIP) IS ITS OWN REQUIREMENT, NOT GENERIC MANA.
+//    getPipRequirements() tracks a `C` pip count separately from W/U/B/R/G,
+//    and separately from generic numeric symbols ({2}, {X}, etc.), which
+//    still contribute no pip requirement at all. This matters because a
+//    card like Warping Wail ({1}{C}) or Null Elemental Blast ({C}) can
+//    only be cast with a source that produces colorless mana specifically
+//    -- a land like Command Tower or City of Brass that produces any ONE
+//    color of the caster's choice does NOT satisfy {C}, since Scryfall's
+//    own produced_mana for those lands is the color list (W/U/B/R/G),
+//    never including C (confirmed against real card data, not assumed).
+//    countManaSources()'s existing `C` bucket already only fills from
+//    cards whose produced_mana genuinely includes 'C' (true colorless
+//    sources like Sol Ring, Ancient Tomb, Wastes), so no change was
+//    needed there -- the gap was purely that getPipRequirements() used to
+//    silently drop {C} pips instead of counting them.
+//
 // 3. MULLIGANS. No explicit mulligan strategy is simulated. hand_size
 //    (default 7, see mana_base_config) is treated as fixed. Karsten's
 //    own conditional model sidesteps needing an explicit mulligan
@@ -187,29 +203,33 @@ function minimumSourcesNeeded({
 
 /**
  * Parses a Scryfall-style mana cost string (e.g. "{2}{G}{G}") into pip
- * counts per color. See module header for the documented hybrid-mana
+ * counts per color, PLUS a `C` count for colorless pips ({C} -- see
+ * module header's 2b for why this is tracked separately from generic
+ * numeric symbols like {2}/{X}, which still contribute no pip
+ * requirement at all). See module header for the documented hybrid-mana
  * simplification (counts toward the first listed color only).
  */
 function getPipRequirements(manaCost) {
-    const pips = { W: 0, U: 0, B: 0, R: 0, G: 0 };
+    const pips = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
     if (!manaCost) return pips;
 
     const symbols = manaCost.match(/\{([^}]+)\}/g) || [];
     for (const raw of symbols) {
         const symbol = raw.slice(1, -1); // strip { }
 
-        if (/^[WUBRG]$/.test(symbol)) {
+        if (/^[WUBRGC]$/.test(symbol)) {
             pips[symbol]++;
         } else if (symbol.includes('/')) {
-            // Hybrid (e.g. "B/R") or Phyrexian (e.g. "B/P") mana.
-            // Simplification: count toward the first listed color only.
+            // Hybrid (e.g. "B/R") or Phyrexian (e.g. "B/P") mana, including
+            // the rarer colorless hybrid form (e.g. "C/W"). Simplification:
+            // count toward the first listed color only.
             const firstColor = symbol.split('/')[0];
-            if (/^[WUBRG]$/.test(firstColor)) {
+            if (/^[WUBRGC]$/.test(firstColor)) {
                 pips[firstColor]++;
             }
         }
-        // Generic numeric symbols ({2}, {X}, etc.) and {C} intentionally
-        // contribute no colored pip requirement.
+        // Generic numeric symbols ({2}, {X}, etc.) intentionally contribute
+        // no pip requirement -- only {C} specifically does.
     }
 
     return pips;
