@@ -146,7 +146,6 @@ const ConfirmedProfile = ({ session }) => {
                 <h2 className="text-xl font-bold text-slate-800">{session.email}</h2>
                 <p className="text-sm text-slate-500">
                     Archidekt: <strong>{session.archidektUsername}</strong> &middot; confirmed {new Date(session.confirmedAt).toLocaleDateString()}
-                    {session.role.value !== 'user' && <> &middot; <strong>{session.role.label}</strong></>}
                 </p>
             </div>
 

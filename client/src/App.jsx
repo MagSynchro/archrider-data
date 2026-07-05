@@ -7,6 +7,7 @@ import UserDeckTable from './components/UserDeckTable';
 import ProfilePage from './components/ProfilePage';
 import AuthPage from './components/AuthPage';
 import NavBar from './components/NavBar';
+import StaffApp from './components/StaffApp';
 
 // Everything session-dependent lives inside the Router so it can use
 // useNavigate to land on /profile after login/registration, regardless
@@ -76,10 +77,17 @@ function AppShell() {
   );
 }
 
+// /staff/* is a wholly separate portal from the consumer app -- it must
+// sit outside AppShell's session gate (which shows AuthPage for any
+// consumer-logged-out visitor) since staff auth is a completely
+// different session/cookie (see StaffApp.jsx).
 function App() {
   return (
     <Router>
-      <AppShell />
+      <Routes>
+        <Route path="/staff/*" element={<StaffApp />} />
+        <Route path="/*" element={<AppShell />} />
+      </Routes>
     </Router>
   );
 }

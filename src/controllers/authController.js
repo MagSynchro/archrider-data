@@ -4,7 +4,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('../../database/db.js');
 const { fetchAllDecksForOwner, fetchOwnerInfo } = require('../utils/archidektDecks.js');
-const { getTierInfo, getRoleInfo } = require('../utils/tiers.js');
+const { getTierInfo } = require('../utils/tiers.js');
 
 // UX call, not a security one -- verification is self-securing regardless
 // of lifetime (see HANDOFF_REGISTRATION.md). 4 hours is forgiving of
@@ -268,6 +268,9 @@ exports.login = async (req, res) => {
         if (!passwordMatches) {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
+        if (user.banned_at) {
+            return res.status(403).json({ error: 'This account has been banned' });
+        }
 
         await refreshArchidektAccountInfoIfStale(user);
 
@@ -351,7 +354,6 @@ exports.getProfile = async (req, res) => {
         );
 
         const tierInfo = getTierInfo(user.tier);
-        const roleInfo = getRoleInfo(user.role);
 
         res.json({
             status: 'confirmed',
@@ -361,7 +363,6 @@ exports.getProfile = async (req, res) => {
             confirmedAt: user.created_at,
             archidektDeckCount: user.archidekt_deck_count,
             ourDeckCount: parseInt(countRows[0].count, 10),
-            role: { value: user.role, label: roleInfo.label },
             credits: {
                 balance: user.credits_balance,
                 max: user.credits_max,

@@ -18,18 +18,8 @@ const TIERS = {
     cartographer: { label: 'Cartographer', regenPerCycle: 5 }
 };
 
-const ROLES = {
-    user: { label: 'User' },
-    moderator: { label: 'Moderator' },
-    admin: { label: 'Admin' }
-};
-
 function getTierInfo(tier) {
     return TIERS[tier] || TIERS.wayfarer;
 }
 
-function getRoleInfo(role) {
-    return ROLES[role] || ROLES.user;
-}
-
-module.exports = { TIERS, ROLES, getTierInfo, getRoleInfo };
+module.exports = { TIERS, getTierInfo };

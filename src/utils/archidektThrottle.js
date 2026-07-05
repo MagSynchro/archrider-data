@@ -29,8 +29,12 @@
 // foreseeable future (see HANDOFF_CREDITS.md's scaling-past-~20-users
 // note, still an open question, not this).
 const PAID_TIERS = new Set(['pathfinder', 'banneret', 'cartographer']);
+// 'staff' isn't a real consumer tier -- it's what admin-initiated
+// sync/probe-for-a-user calls (see adminController.js) pass explicitly,
+// so staff support actions always get priority-lane treatment regardless
+// of the target user's own tier.
 function isPriorityTier(tier) {
-    return PAID_TIERS.has(tier);
+    return PAID_TIERS.has(tier) || tier === 'staff';
 }
 
 // Factory rather than a single hardcoded module-level queue so tests can

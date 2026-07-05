@@ -232,12 +232,11 @@ CREATE TABLE IF NOT EXISTS users (
     -- src/utils/tiers.js.
     tier VARCHAR(20) NOT NULL DEFAULT 'wayfarer'
         CHECK (tier IN ('wayfarer', 'pathfinder', 'banneret', 'cartographer')),
-    -- Staff permission level, orthogonal to tier -- a user's paid tier
-    -- says nothing about whether they're also a moderator/admin. Actions
-    -- gated on this (ban, delete decks, add credits, etc.) aren't built
-    -- yet; this column is display-only for now too.
-    role VARCHAR(20) NOT NULL DEFAULT 'user'
-        CHECK (role IN ('user', 'moderator', 'admin')),
+    -- Platform ban (migration 019). NULL = not banned. Enforced at login
+    -- and on every authenticated request so a ban takes effect
+    -- immediately, not just at next login.
+    banned_at TIMESTAMPTZ,
+    ban_reason TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_users_archidekt_user_id ON users(archidekt_user_id);
@@ -255,6 +254,57 @@ CREATE TABLE IF NOT EXISTS pending_registrations (
 );
 CREATE INDEX IF NOT EXISTS idx_pending_registrations_email ON pending_registrations(email);
 CREATE INDEX IF NOT EXISTS idx_pending_registrations_username ON pending_registrations(claimed_username);
+
+-- Owner/Admin/Moderator accounts (migration 019, 'owner' added in 020) --
+-- a wholly separate entity from `users`, never linked to Archidekt data.
+-- An admin/owner supplies username/password/email/real_name/role
+-- directly when creating one; no self-registration path. Convention
+-- (enforced in the create-staff-account controller, not the DB):
+-- usernames are prefixed Admin-/Mod-/Owner- by role.
+--
+-- Owner is strictly more privileged than Admin, and exists specifically
+-- so Admin accounts can no longer create or delete other Admin accounts
+-- (see 020_owner_role.sql -- a system-takeover risk otherwise). Owner
+-- accounts are never created or deleted through the running app at all,
+-- only via a bootstrap/DB script -- if Owner-creation were reachable
+-- through the API, a compromised Owner session could mint more Owners,
+-- reintroducing the exact risk this role split exists to close off. See
+-- HANDOFF_ADMIN.md.
+--
+-- created_by is nullable -- the first staff account(s) are seeded by a
+-- bootstrap script, with no admin/owner yet to attribute that to.
+CREATE TABLE IF NOT EXISTS staff_accounts (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    real_name VARCHAR(150) NOT NULL,
+    role VARCHAR(20) NOT NULL CHECK (role IN ('admin', 'moderator', 'owner')),
+    created_by INTEGER REFERENCES staff_accounts(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Audit log for every admin/moderator action. actor_username/actor_email
+-- are a snapshot at the time of the action (not a live join) -- staff
+-- accounts are hard-deleted, and the point of this table is a durable
+-- record of who did what, including retaining a removed bad actor's
+-- email so it's recognizable if they try to re-enter later.
+-- actor_staff_id is ON DELETE SET NULL so a hard delete never cascades
+-- into losing log rows.
+CREATE TABLE IF NOT EXISTS staff_actions (
+    id SERIAL PRIMARY KEY,
+    actor_staff_id INTEGER REFERENCES staff_accounts(id) ON DELETE SET NULL,
+    actor_username VARCHAR(50) NOT NULL,
+    actor_email VARCHAR(255) NOT NULL,
+    actor_role VARCHAR(20) NOT NULL,
+    action VARCHAR(50) NOT NULL,
+    target_type VARCHAR(30),
+    target_id VARCHAR(100),
+    details JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_staff_actions_actor_email ON staff_actions(actor_email);
+CREATE INDEX IF NOT EXISTS idx_staff_actions_created_at ON staff_actions(created_at);
 
 -- Deck ownership, added via ALTER (not inline on commander_decks' own
 -- CREATE TABLE above) because users doesn't exist yet at that point in
